@@ -92,6 +92,7 @@ class ReflexCaptureAgent(CaptureAgent):
         features = util.Counter()
         successor = self.getSuccessor(gameState, action)
         features['successorScore'] = self.getScore(successor)
+
         return features
 
     def getWeights(self, gameState, action):
