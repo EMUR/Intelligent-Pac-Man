@@ -33,7 +33,6 @@ def createTeam(firstIndex, secondIndex, isRed,
     any extra arguments, so you should make sure that the default
     behavior is what you want for the nightly contest.
     """
-
     # The following line is an example only; feel free to change it.
     return [eval(first)(firstIndex), eval(second)(secondIndex)]
 
@@ -46,15 +45,14 @@ class MainAgent(CaptureAgent):
     def __init__(self, index, timeForComputing=.1):
         CaptureAgent.__init__(self, index, timeForComputing=.1)
         self.isAtCenter = False
-        self.labyrinthCenter = (0, 0)
+        self.labyrinthCenter = None
+        self.initialPosition = None
+        self.indices = None
 
         if index is 0 or index is 1:
             self.northBias = True
         else:
             self.northBias = False
-        self.center = (0, 0)
-        self.initialPosition = None
-        self.indices = None
 
     def registerInitialState(self, gameState):
         """
@@ -81,7 +79,7 @@ class MainAgent(CaptureAgent):
         else:
             self.indices = tuple(gameState.getBlueTeamIndices())
 
-        if self.initialPosition == None:
+        if self.initialPosition is None:
             self.initialPosition = gameState.getAgentState(self.indices[1]).getPosition()
 
         ''' 
@@ -100,7 +98,7 @@ class MainAgent(CaptureAgent):
 
         # Start at start state, try to get to center then switch to offense
         if not self.isAtCenter:
-            evaluateType = 'start'
+            evaluateType = 'center'
 
         if agentCurrentPosition == self.labyrinthCenter and not self.isAtCenter:
             self.isAtCenter = True
@@ -147,31 +145,36 @@ class MainAgent(CaptureAgent):
         global features, weights
 
         if evaluateType == 'attack':
-            features = self.getFeaturesAttack(gameState, action)
-            weights = self.getWeightsAttack(gameState, action)
+            # print("Attack agent")
+            features = self.featuresForAttack(gameState, action)
+            weights = self.weightsForAttack(gameState, action)
 
         elif evaluateType == 'defend':
-            features = self.getFeaturesDefend(gameState, action)
-            weights = self.getWeightsDefend(gameState, action)
+            # print("Defense agent")
+            features = self.featuresForDefense(gameState, action)
+            weights = self.weightsForDefense(gameState, action)
 
-        elif evaluateType == 'start':
-            features = self.getFeaturesStart(gameState, action)
-            weights = self.getWeightsStart(gameState, action)
+        elif evaluateType == 'center':
+            # print("Center agent")
+            features = self.featuresForGoingToCenter(gameState, action)
+            weights = self.weightsForGoingToCenter(gameState, action)
 
         return features * weights
 
-    def getFeaturesAttack(self, gameState, action):
+    def featuresForAttack(self, gameState, action):
         attackFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
-        cornerTrap = 0
+
+        attackFeatures['cornerTrap'] = 0
 
         if self.isDeadEnd(successor):
             x, y = successor.getAgentState(self.index).getPosition()
+
             if successor.getAgentState(self.index).isPacman:
                 if not gameState.hasFood(int(x), int(y)) and (x, y) != self.initialPosition:
-                    cornerTrap = 50
+                    attackFeatures['cornerTrap'] = 1
 
-        attackFeatures['successorScore'] = self.getScore(successor) - cornerTrap
+        attackFeatures['successorScore'] = self.getScore(successor)
 
         agentCurrentState = successor.getAgentState(self.index)
         agentCurrentPosition = agentCurrentState.getPosition()
@@ -218,6 +221,7 @@ class MainAgent(CaptureAgent):
 
         attackFeatures['capsuleDist'] = 1.0 / minCapsuleDist
 
+        # Undesirable actions
         if action == Directions.STOP:
             attackFeatures['stop'] = 1
 
@@ -228,7 +232,7 @@ class MainAgent(CaptureAgent):
 
         return attackFeatures
 
-    def getFeaturesDefend(self, gameState, action):
+    def featuresForDefense(self, gameState, action):
         defendingFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
         agentCurrentState = successor.getAgentState(self.index)
@@ -245,6 +249,7 @@ class MainAgent(CaptureAgent):
             defendingFeatures['invaderDistance'] = min(
                 [self.getMazeDistance(agentCurrentPosition, invader.getPosition()) for invader in invaders])
 
+        # Undesirable actions
         if action == Directions.STOP:
             defendingFeatures['stop'] = 1
 
@@ -255,7 +260,7 @@ class MainAgent(CaptureAgent):
 
         return defendingFeatures
 
-    def getFeaturesStart(self, gameState, action):
+    def featuresForGoingToCenter(self, gameState, action):
         startFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
 
@@ -270,21 +275,21 @@ class MainAgent(CaptureAgent):
 
         return startFeatures
 
-    def getWeightsAttack(self, gameState, action):
+    def weightsForAttack(self, gameState, action):
         return {'successorScore': 100, 'danger': -400, 'distanceToFood': -1, 'stop': -2000, 'reverse': -20,
-                'capsuleDist': 3, 'scaredNearbyEnemy': 50}
+                'capsuleDist': 3, 'scaredNearbyEnemy': 50, 'cornerTrap': -50}
 
-    def getWeightsDefend(self, gameState, action):
+    def weightsForDefense(self, gameState, action):
         return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'stop': -2000, 'reverse': -20}
 
-    def getWeightsStart(self, gameState, action):
+    def weightsForGoingToCenter(self, gameState, action):
         return {'distanceToCenter': -1, 'atCenter': 1000}
 
     def isDeadEnd(self, gameState):
         actions = gameState.getLegalActions(self.index)
         result = len(actions) <= 2
         return result
-    # This method is overridden in subclasses
+
     def goToCenter(self, gameState):
         # Get geographical center
         x = int(gameState.getWalls().width / 2)
