@@ -141,23 +141,20 @@ class MainAgent(CaptureAgent):
         """
         Computes a linear combination of features and feature weights
         """
-        features = []
-        weights = []
+        global features
+        weights = self.getWeights()
 
         if evaluateType == 'attack':
             # print("Attack agent")
             features = self.featuresForAttack(gameState, action)
-            weights = self.weightsForAttack()
 
         elif evaluateType == 'defend':
             # print("Defense agent")
             features = self.featuresForDefense(gameState, action)
-            weights = self.weightsForDefense()
 
         elif evaluateType == 'center':
             # print("Center agent")
             features = self.featuresForGoingToCenter(gameState, action)
-            weights = self.weightsForGoingToCenter()
 
         return sum(features[key] * weights.get(key, 0) for key in features)
 
@@ -166,8 +163,6 @@ class MainAgent(CaptureAgent):
         successor = self.getSuccessor(gameState, action)
 
         # Check if state is a dead end
-        attackFeatures['cornerTrap'] = 0
-
         if self.isDeadEnd(successor):
             x, y = successor.getAgentState(self.index).getPosition()
 
@@ -193,8 +188,6 @@ class MainAgent(CaptureAgent):
 
         if closestEnemyDistance <= minimumEnemyDistance:
             attackFeatures['danger'] = 1
-        else:
-            attackFeatures['danger'] = 0
 
         # Compute distance to capsule
         capsules = self.getCapsules(successor)
@@ -205,8 +198,6 @@ class MainAgent(CaptureAgent):
             minCapsuleDist = .1
 
         attackFeatures['capsuleDist'] = 1.0 / minCapsuleDist
-
-        attackFeatures['scaredNearbyEnemy'] = 0
 
         # Get scared enemies
         # enemies = [successor.getAgentState(opponent) for opponent in self.getOpponents(successor)]
@@ -227,15 +218,9 @@ class MainAgent(CaptureAgent):
         # Undesirable actions
         if action == Directions.STOP:
             attackFeatures['stop'] = 1
-        else:
-            attackFeatures['stop'] = 0
 
-        rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
-
-        if action == rev:
+        if action == Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]:
             attackFeatures['reverse'] = 1
-        else:
-            attackFeatures['reverse'] = 0
 
         return attackFeatures
 
@@ -259,15 +244,9 @@ class MainAgent(CaptureAgent):
         # Undesirable actions
         if action == Directions.STOP:
             defendingFeatures['stop'] = 1
-        else:
-            defendingFeatures['stop'] = 0
 
-        rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
-
-        if action == rev:
+        if action == Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]:
             defendingFeatures['reverse'] = 1
-        else:
-            defendingFeatures['reverse'] = 0
 
         return defendingFeatures
 
@@ -283,20 +262,13 @@ class MainAgent(CaptureAgent):
 
         if agentCurrentPosition == self.labyrinthCenter:
             startFeatures['atCenter'] = 1
-        else:
-            startFeatures['atCenter'] = 0
 
         return startFeatures
 
-    def weightsForAttack(self):
-        return {'cornerTrap': -50, 'successorScore': 100, 'danger': -400, 'distanceToFood': -1, 'capsuleDist': 3,
-                'scaredNearbyEnemy': 50, 'stop': -2000, 'reverse': -20}
-
-    def weightsForDefense(self):
-        return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'stop': -2000, 'reverse': -20}
-
-    def weightsForGoingToCenter(self):
-        return {'distanceToCenter': -1, 'atCenter': 1000}
+    def getWeights(self):
+        return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -50, 'successorScore': 100,
+                'danger': -400, 'distanceToFood': -1, 'capsuleDist': 3, 'scaredNearbyEnemy': 50, 'stop': -2000,
+                'reverse': -20, 'distanceToCenter': -1, 'atCenter': 1000}
 
     def isDeadEnd(self, gameState):
         actions = gameState.getLegalActions(self.index)
