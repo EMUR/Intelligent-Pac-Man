@@ -181,18 +181,11 @@ class MainAgent(CaptureAgent):
 
         attackFeatures['capsuleDistance'] = 1.0 / closestCapsuleDistance
 
-        # Get scared enemies
-        enemies = [successor.getAgentState(opponent) for opponent in self.getOpponents(successor)]
+        # Get distance to closest scared enemy
+        closestEnemyDistance = self.getClosestScaredEnemyDistance(gameState)
 
-        scaredEnemies = list(filter(lambda thisEnemy: thisEnemy.scaredTimer is not 0
-                                    and not thisEnemy.isPacman, enemies))
-
-        attackFeatures['scaredNearbyEnemy'] = len(scaredEnemies)
-
-        # if scaredEnemies:
-        #     sortedScaredEnemies = sorted(scaredEnemies, key=lambda enemy: self.getMazeDistance(
-        #         agentCurrentPosition, enemy.configuration.pos))
-        #     attackFeatures['scaredNearbyEnemy'] = 1
+        if closestEnemyDistance is not None and closestEnemyDistance < 3:
+            attackFeatures['scaredNearbyEnemy'] = 1
 
         # Check if state is a dead end
         if self.isDeadEnd(successor):
@@ -244,7 +237,7 @@ class MainAgent(CaptureAgent):
 
     def getWeights(self):
         return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -50, 'successorScore': 100,
-                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 50,
+                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 100,
                 'distanceToCenter': -1, 'atCenter': 1000}
 
     def isDeadEnd(self, gameState):
@@ -276,8 +269,25 @@ class MainAgent(CaptureAgent):
 
     def getClosestEnemyDistance(self, gameState):
         try:
+            filteredEnemiesAndPositions = list(filter(lambda element:
+                                                      gameState.getAgentState(element[0]).scaredTimer is 0
+                                                      and not gameState.getAgentState(element[0]).isPacman,
+                                                      self.getVisibleEnemiesPositions(gameState)))
+
             return min([self.getMazeDistance(gameState.getAgentPosition(self.index), position)
-                        for (index, position) in self.getVisibleEnemiesPositions(gameState)])
+                        for (index, position) in filteredEnemiesAndPositions])
+        except ValueError:
+            return None
+
+    def getClosestScaredEnemyDistance(self, gameState):
+        try:
+            filteredEnemiesAndPositions = list(filter(lambda element:
+                                                      gameState.getAgentState(element[0]).scaredTimer > 0
+                                                      and not gameState.getAgentState(element[0]).isPacman,
+                                                      self.getVisibleEnemiesPositions(gameState)))
+
+            return min([self.getMazeDistance(gameState.getAgentPosition(self.index), position)
+                        for (index, position) in filteredEnemiesAndPositions])
         except ValueError:
             return None
 
