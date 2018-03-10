@@ -10,6 +10,7 @@ import random
 
 import util
 from captureAgents import CaptureAgent
+from game import Directions
 from util import nearestPoint
 
 
@@ -197,6 +198,15 @@ class MainAgent(CaptureAgent):
 
         attackFeatures['successorScore'] = self.getScore(successor)
 
+        # Undesirable actions
+        if action == Directions.STOP:
+            attackFeatures['stop'] = 1
+
+        reverseAction = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
+
+        if action == reverseAction:
+            attackFeatures['reverse'] = 1
+
         return attackFeatures
 
     def featuresForDefense(self, gameState, action):
@@ -219,6 +229,15 @@ class MainAgent(CaptureAgent):
 
         # TODO: if you are a scared ghost, don't go after enemy Pacman
 
+        # Undesirable actions
+        if action == Directions.STOP:
+            defendingFeatures['stop'] = 1
+
+        reverseAction = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
+
+        if action == reverseAction:
+            defendingFeatures['reverse'] = 1
+
         return defendingFeatures
 
     def featuresForGoingToCenter(self, gameState, action):
@@ -237,8 +256,8 @@ class MainAgent(CaptureAgent):
 
     def getWeights(self):
         return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -50, 'successorScore': 100,
-                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 100,
-                'distanceToCenter': -1, 'atCenter': 1000}
+                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 50,
+                'distanceToCenter': -1, 'atCenter': 1000, 'stop': -2000, 'reverse': -20}
 
     def isDeadEnd(self, gameState):
         actions = gameState.getLegalActions(self.index)
