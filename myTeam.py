@@ -111,6 +111,23 @@ class MainAgent(CaptureAgent):
                     evaluateType = 'defend'
                     break
 
+        numberOfPacmans = 0
+
+        for index in self.indices:
+            agentState = gameState.getAgentState(index)
+
+            if agentState.isPacman:
+                numberOfPacmans += 1
+
+        if numberOfPacmans > 1 and self.getNumberOfEnemyPacman(gameState):
+            for index in self.indices:
+                if index is not self.index:
+                    distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
+                    distanceThis = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
+
+                    if distanceThis < distanceOther:
+                        evaluateType = 'defend'
+
         actions = gameState.getLegalActions(self.index)
         values = [self.evaluate(gameState, action, evaluateType) for action in actions]
 
@@ -256,7 +273,7 @@ class MainAgent(CaptureAgent):
 
     def getWeights(self):
         return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -50, 'successorScore': 100,
-                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 50,
+                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 100,
                 'distanceToCenter': -1, 'atCenter': 1000, 'stop': -2000, 'reverse': -20}
 
     def isDeadEnd(self, gameState):
@@ -309,6 +326,9 @@ class MainAgent(CaptureAgent):
                         for (index, position) in filteredEnemiesAndPositions])
         except ValueError:
             return None
+
+    def getNumberOfEnemyPacman(self, gameState):
+        return sum([gameState.getAgentState(enemy).isPacman for enemy in self.getOpponents(gameState)])
 
     def isPacman(self, gameState):
         return gameState.getAgentState(self.index).isPacman
