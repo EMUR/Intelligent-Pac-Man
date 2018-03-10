@@ -92,7 +92,6 @@ class MainAgent(CaptureAgent):
         agentCurrentPosition = gameState.getAgentPosition(self.index)
         evaluateType = 'attack'
 
-        # Start at start state, try to get to center then switch to offense
         if not self.isAtCenter:
             evaluateType = 'center'
 
@@ -106,7 +105,6 @@ class MainAgent(CaptureAgent):
 
         if enemyPositions:
             for enemyIndex, enemyPosition in enemyPositions:
-                # If we detect an enemy and are on home turf we go after them and defend home
                 if self.getMazeDistance(agentCurrentPosition, enemyPosition) < enemySafeDistance and not self.isPacman(
                         gameState):
                     evaluateType = 'defend'
@@ -164,7 +162,7 @@ class MainAgent(CaptureAgent):
                            for food in self.getFood(successor).asList()])
         attackFeatures['distanceToFood'] = minDistance
 
-        # TODO: Compute distance to ally agent (maximize distance between if in enemyTerritory)
+        # TODO: Compute distance to other agent on team to maximize distance if in enemy territory
 
         # Compute distance to enemy
         closestEnemyDistance = self.getClosestEnemyDistance(successor)
@@ -177,17 +175,19 @@ class MainAgent(CaptureAgent):
         capsules = self.getCapsules(successor)
 
         try:
-            minCapsuleDist = min([self.getMazeDistance(agentCurrentPosition, capsule) for capsule in capsules])
+            closestCapsuleDistance = min([self.getMazeDistance(agentCurrentPosition, capsule) for capsule in capsules])
         except ValueError:
-            minCapsuleDist = .1
+            closestCapsuleDistance = .1
 
-        attackFeatures['capsuleDist'] = 1.0 / minCapsuleDist
+        attackFeatures['capsuleDistance'] = 1.0 / closestCapsuleDistance
 
         # Get scared enemies
         enemies = [successor.getAgentState(opponent) for opponent in self.getOpponents(successor)]
 
         scaredEnemies = list(filter(lambda thisEnemy: thisEnemy.scaredTimer is not 0
                                     and not thisEnemy.isPacman, enemies))
+
+        attackFeatures['scaredNearbyEnemy'] = len(scaredEnemies)
 
         # if scaredEnemies:
         #     sortedScaredEnemies = sorted(scaredEnemies, key=lambda enemy: self.getMazeDistance(
@@ -244,8 +244,8 @@ class MainAgent(CaptureAgent):
 
     def getWeights(self):
         return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -50, 'successorScore': 100,
-                'danger': -400, 'distanceToFood': -1, 'capsuleDist': 3, 'scaredNearbyEnemy': 50, 'distanceToCenter': -1,
-                'atCenter': 1000}
+                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 50,
+                'distanceToCenter': -1, 'atCenter': 1000}
 
     def isDeadEnd(self, gameState):
         actions = gameState.getLegalActions(self.index)
