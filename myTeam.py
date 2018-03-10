@@ -52,6 +52,9 @@ class MainAgent(CaptureAgent):
             self.northBias = True
         else:
             self.northBias = False
+        self.center = (0, 0)
+        self.initialPosition = None
+        self.indices = None
 
     def registerInitialState(self, gameState):
         """
@@ -73,6 +76,14 @@ class MainAgent(CaptureAgent):
         '''
         CaptureAgent.registerInitialState(self, gameState)
 
+        if self.red:
+            self.indices = tuple(gameState.getRedTeamIndices())
+        else:
+            self.indices = tuple(gameState.getBlueTeamIndices())
+
+        if self.initialPosition == None:
+            self.initialPosition = gameState.getAgentState(self.indices[1]).getPosition()
+
         ''' 
         Your initialization code goes here, if you need any.
         '''
@@ -80,6 +91,7 @@ class MainAgent(CaptureAgent):
         self.goToCenter(gameState)
 
     def chooseAction(self, gameState):
+
         """
         Picks among the actions with the highest Q(s,a).
         """
@@ -119,9 +131,9 @@ class MainAgent(CaptureAgent):
         Finds the next successor which is a grid position (location tuple).
         """
         successor = gameState.generateSuccessor(self.index, action)
-        pos = successor.getAgentState(self.index).getPosition()
+        agentCurrentPosition = successor.getAgentState(self.index).getPosition()
 
-        if pos != nearestPoint(pos):
+        if agentCurrentPosition != nearestPoint(agentCurrentPosition):
             # Only half a grid position was covered
             return successor.generateSuccessor(self.index, action)
 
@@ -151,7 +163,15 @@ class MainAgent(CaptureAgent):
     def getFeaturesAttack(self, gameState, action):
         attackFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
-        attackFeatures['successorScore'] = self.getScore(successor)
+        cornerTrap = 0
+
+        if self.isDeadEnd(successor):
+            x, y = successor.getAgentState(self.index).getPosition()
+            if successor.getAgentState(self.index).isPacman:
+                if not gameState.hasFood(int(x), int(y)) and (x, y) != self.initialPosition:
+                    cornerTrap = 50
+
+        attackFeatures['successorScore'] = self.getScore(successor) - cornerTrap
 
         agentCurrentState = successor.getAgentState(self.index)
         agentCurrentPosition = agentCurrentState.getPosition()
@@ -211,7 +231,6 @@ class MainAgent(CaptureAgent):
     def getFeaturesDefend(self, gameState, action):
         defendingFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
-
         agentCurrentState = successor.getAgentState(self.index)
         agentCurrentPosition = agentCurrentState.getPosition()
 
@@ -261,6 +280,11 @@ class MainAgent(CaptureAgent):
     def getWeightsStart(self, gameState, action):
         return {'distanceToCenter': -1, 'atCenter': 1000}
 
+    def isDeadEnd(self, gameState):
+        actions = gameState.getLegalActions(self.index)
+        result = len(actions) <= 2
+        return result
+    # This method is overridden in subclasses
     def goToCenter(self, gameState):
         # Get geographical center
         x = int(gameState.getWalls().width / 2)
