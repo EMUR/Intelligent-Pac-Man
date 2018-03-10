@@ -10,7 +10,6 @@ import random
 
 import util
 from captureAgents import CaptureAgent
-from game import Directions
 from util import nearestPoint
 
 
@@ -18,6 +17,7 @@ from util import nearestPoint
 # Team creation #
 #################
 
+# noinspection PyUnusedLocal
 def createTeam(firstIndex, secondIndex, isRed,
                first='MainAgent', second='MainAgent'):
     """
@@ -42,10 +42,11 @@ def createTeam(firstIndex, secondIndex, isRed,
 ##########
 
 class MainAgent(CaptureAgent):
+    # noinspection PyUnusedLocal
     def __init__(self, index, timeForComputing=.1):
         CaptureAgent.__init__(self, index, timeForComputing=.1)
         self.isAtCenter = False
-        self.labyrinthCenter = None
+        self.mazeCenter = None
         self.initialPosition = None
         self.indices = None
 
@@ -65,7 +66,6 @@ class MainAgent(CaptureAgent):
         self.distancer.getDistance(p1, p2)
         IMPORTANT: This method may run for at most 15 seconds.
         """
-
         ''' 
         Make sure you do not delete the following line. If you would like to
         use Manhattan distances instead of maze distances in order to save
@@ -82,10 +82,7 @@ class MainAgent(CaptureAgent):
         if self.initialPosition is None:
             self.initialPosition = gameState.getAgentState(self.indices[1]).getPosition()
 
-        ''' 
-        Your initialization code goes here, if you need any.
-        '''
-        # Agents try to go to center with top or bottom bias
+        # At the start of the game, or when respawned, agents try to reach the middle
         self.goToCenter(gameState)
 
     def chooseAction(self, gameState):
@@ -99,7 +96,7 @@ class MainAgent(CaptureAgent):
         if not self.isAtCenter:
             evaluateType = 'center'
 
-        if agentCurrentPosition == self.labyrinthCenter and not self.isAtCenter:
+        if agentCurrentPosition == self.mazeCenter and not self.isAtCenter:
             self.isAtCenter = True
             evaluateType = 'attack'
 
@@ -145,15 +142,12 @@ class MainAgent(CaptureAgent):
         weights = self.getWeights()
 
         if evaluateType == 'attack':
-            # print("Attack agent")
             features = self.featuresForAttack(gameState, action)
 
         elif evaluateType == 'defend':
-            # print("Defense agent")
             features = self.featuresForDefense(gameState, action)
 
         elif evaluateType == 'center':
-            # print("Center agent")
             features = self.featuresForGoingToCenter(gameState, action)
 
         return sum(features[key] * weights.get(key, 0) for key in features)
@@ -161,16 +155,6 @@ class MainAgent(CaptureAgent):
     def featuresForAttack(self, gameState, action):
         attackFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
-
-        # Check if state is a dead end
-        if self.isDeadEnd(successor):
-            x, y = successor.getAgentState(self.index).getPosition()
-
-            if successor.getAgentState(self.index).isPacman:
-                if not gameState.hasFood(int(x), int(y)) and (x, y) != self.initialPosition:
-                    attackFeatures['cornerTrap'] = 1
-
-        attackFeatures['successorScore'] = self.getScore(successor)
 
         agentCurrentState = successor.getAgentState(self.index)
         agentCurrentPosition = agentCurrentState.getPosition()
@@ -180,7 +164,7 @@ class MainAgent(CaptureAgent):
                            for food in self.getFood(successor).asList()])
         attackFeatures['distanceToFood'] = minDistance
 
-        # Compute distance to ally agent (maximize distance between if in enemyTerritory)
+        # TODO: Compute distance to ally agent (maximize distance between if in enemyTerritory)
 
         # Compute distance to enemy
         closestEnemyDistance = self.getClosestEnemyDistance(successor)
@@ -200,33 +184,32 @@ class MainAgent(CaptureAgent):
         attackFeatures['capsuleDist'] = 1.0 / minCapsuleDist
 
         # Get scared enemies
-        # enemies = [successor.getAgentState(opponent) for opponent in self.getOpponents(successor)]
-        #
-        # scaredEnemies = list(filter(lambda thisEnemy: thisEnemy.scaredTimer is not 0
-        #                             and not thisEnemy.isPacman, enemies))
-        #
-        # # TODO: if you are a scared ghost, don't go after enemy PacMan
-        #
+        enemies = [successor.getAgentState(opponent) for opponent in self.getOpponents(successor)]
+
+        scaredEnemies = list(filter(lambda thisEnemy: thisEnemy.scaredTimer is not 0
+                                    and not thisEnemy.isPacman, enemies))
+
         # if scaredEnemies:
-        #     # sortedScaredEnemies = sorted(scaredEnemies, key=lambda enemy: self.getMazeDistance(
-        #     #     agentCurrentPosition, enemy.configuration.pos))
+        #     sortedScaredEnemies = sorted(scaredEnemies, key=lambda enemy: self.getMazeDistance(
+        #         agentCurrentPosition, enemy.configuration.pos))
         #     attackFeatures['scaredNearbyEnemy'] = 1
-        #
-        # else:
-        #     attackFeatures['scaredNearbyEnemy'] = 0
 
-        # Undesirable actions
-        if action == Directions.STOP:
-            attackFeatures['stop'] = 1
+        # Check if state is a dead end
+        if self.isDeadEnd(successor):
+            x, y = successor.getAgentState(self.index).getPosition()
 
-        if action == Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]:
-            attackFeatures['reverse'] = 1
+            if successor.getAgentState(self.index).isPacman:
+                if not gameState.hasFood(int(x), int(y)) and (x, y) != self.initialPosition:
+                    attackFeatures['cornerTrap'] = 1
+
+        attackFeatures['successorScore'] = self.getScore(successor)
 
         return attackFeatures
 
     def featuresForDefense(self, gameState, action):
         defendingFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
+
         agentCurrentState = successor.getAgentState(self.index)
         agentCurrentPosition = agentCurrentState.getPosition()
 
@@ -241,12 +224,7 @@ class MainAgent(CaptureAgent):
             defendingFeatures['invaderDistance'] = min(
                 [self.getMazeDistance(agentCurrentPosition, invader.getPosition()) for invader in invaders])
 
-        # Undesirable actions
-        if action == Directions.STOP:
-            defendingFeatures['stop'] = 1
-
-        if action == Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]:
-            defendingFeatures['reverse'] = 1
+        # TODO: if you are a scared ghost, don't go after enemy Pacman
 
         return defendingFeatures
 
@@ -257,18 +235,17 @@ class MainAgent(CaptureAgent):
         agentCurrentState = successor.getAgentState(self.index)
         agentCurrentPosition = agentCurrentState.getPosition()
 
-        distanceToCenter = self.getMazeDistance(agentCurrentPosition, self.labyrinthCenter)
-        startFeatures['distanceToCenter'] = distanceToCenter
+        startFeatures['distanceToCenter'] = self.getMazeDistance(agentCurrentPosition, self.mazeCenter)
 
-        if agentCurrentPosition == self.labyrinthCenter:
+        if agentCurrentPosition == self.mazeCenter:
             startFeatures['atCenter'] = 1
 
         return startFeatures
 
     def getWeights(self):
         return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -50, 'successorScore': 100,
-                'danger': -400, 'distanceToFood': -1, 'capsuleDist': 3, 'scaredNearbyEnemy': 50, 'stop': -2000,
-                'reverse': -20, 'distanceToCenter': -1, 'atCenter': 1000}
+                'danger': -400, 'distanceToFood': -1, 'capsuleDist': 3, 'scaredNearbyEnemy': 50, 'distanceToCenter': -1,
+                'atCenter': 1000}
 
     def isDeadEnd(self, gameState):
         actions = gameState.getLegalActions(self.index)
@@ -290,7 +267,7 @@ class MainAgent(CaptureAgent):
         else:
             locations = [(x, thisY) for thisY in range(y, 0, -1) if not gameState.hasWall(x, thisY)]
 
-        self.labyrinthCenter = sorted(locations, key=lambda location: self.getMazeDistance(
+        self.mazeCenter = sorted(locations, key=lambda location: self.getMazeDistance(
             gameState.getAgentState(self.index).getPosition(), location))[0]
 
     def getVisibleEnemiesPositions(self, gameState):
