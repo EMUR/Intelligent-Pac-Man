@@ -231,7 +231,7 @@ class MainAgent(CaptureAgent):
 
         # Compute distance to enemy
         closestEnemyDistance = self.getClosestEnemyDistance(successor)
-        minimumEnemyDistance = 4
+        minimumEnemyDistance = 2
 
         if closestEnemyDistance <= minimumEnemyDistance:
             attackFeatures['danger'] = 1
@@ -329,8 +329,8 @@ class MainAgent(CaptureAgent):
         return startFeatures
 
     def getWeights(self):
-        return {'numberOfInvaders': -2000, 'invaderDistance': -50, 'cornerTrap': -100, 'successorScore': 100,
-                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 100,
+        return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -100, 'successorScore': 100,
+                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 50, 'scaredNearbyEnemy': 100,
                 'distanceToCenter': -1, 'atCenter': 1000, 'stop': -2000, 'reverse': -20, 'distanceBetweenMates': -1000}
 
     def isDeadEnd(self, gameState):
