@@ -247,7 +247,7 @@ class MainAgent(CaptureAgent):
         attackFeatures['capsuleDistance'] = 1.0 / closestCapsuleDistance
 
         # Get distance to closest scared enemy
-        closestEnemyDistance = self.getClosestScaredEnemyDistance(gameState)
+        closestEnemyDistance = self.getClosestScaredEnemyDistance(successor)
 
         if closestEnemyDistance is not None and closestEnemyDistance < 3:
             attackFeatures['scaredNearbyEnemy'] = 1
@@ -262,7 +262,6 @@ class MainAgent(CaptureAgent):
 
         attackFeatures['successorScore'] = self.getScore(successor)
 
-        # TODO: Compute distance to other agent on team to maximize distance if in enemy territory
         try:
             attackFeatures['distanceBetweenMates'] = 1 / self.getDistanceBetweenTeamMates(successor)
         except ZeroDivisionError:
@@ -292,12 +291,24 @@ class MainAgent(CaptureAgent):
             filter(lambda thisInvader: thisInvader.isPacman and thisInvader.getPosition() is not None, enemies))
         defendingFeatures['numberOfInvaders'] = len(invaders)
 
+        minimumInvaderDistance = 0
+
         # Find distance to closest invader
         if invaders:
-            defendingFeatures['invaderDistance'] = min(
-                [self.getMazeDistance(agentCurrentPosition, invader.getPosition()) for invader in invaders])
+            minimumInvaderDistance = min([self.getMazeDistance(agentCurrentPosition, invader.getPosition())
+                                          for invader in invaders])
+            defendingFeatures['invaderDistance'] = minimumInvaderDistance
 
-        # TODO: if you are a scared ghost, don't go after enemy Pacman
+        # If you are a scared ghost, don't go after enemy Pacman
+        agentScaredTimer = agentCurrentState.scaredTimer
+
+        if agentScaredTimer > 0:
+            print('Agent scared timer: {}, minimum invader distance: {}'.format(agentScaredTimer, minimumInvaderDistance))
+
+        if agentScaredTimer and minimumInvaderDistance < 3:
+            defendingFeatures['teammateIsScaredGhost'] = 1
+            print('Scared agent')
+
         try:
             defendingFeatures['distanceBetweenMates'] = 1 / self.getDistanceBetweenTeamMates(successor)
         except ZeroDivisionError:
@@ -329,9 +340,16 @@ class MainAgent(CaptureAgent):
         return startFeatures
 
     def getWeights(self):
-        return {'numberOfInvaders': -0.5, 'invaderDistance': -0.025, 'cornerTrap': -0.05, 'successorScore': 0.05,
-                'danger': -0.2, 'distanceToFood': -0.0005, 'capsuleDistance': 0.025, 'scaredNearbyEnemy': 0.05,
-                'distanceToCenter': -0.0005, 'atCenter': 0.5, 'stop': -1.0, 'reverse': -0.01, 'distanceBetweenMates': -0.5}
+        # return {'numberOfInvaders': -0.5, 'invaderDistance': -0.025, 'cornerTrap': -0.05, 'successorScore': 0.05,
+        #         'danger': -0.2, 'distanceToFood': -0.0005, 'capsuleDistance': 0.025, 'scaredNearbyEnemy': 0.05,
+        #         'distanceToCenter': -0.0005, 'atCenter': 0.5, 'stop': -1.0, 'reverse': -0.01,
+        #         'teammateIsScaredGhost': -0.2, 'distanceBetweenMates': -0.5}
+
+        return {'numberOfInvaders': -1000, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'suicide': -5000,
+                'successorScore': 200, 'distanceToFood': -5, 'distanceToOther': -40, 'distanceToOpponent': -225,
+                'capsuleDistance': 45, 'distanceToCapsuleThreatened': -230, 'atHomeThreatened': 400,
+                'distanceToCenter': -10, 'atCenter': 100,
+                'cornerTrap': -1000, 'distanceBetweenMates': -1000, 'teammateIsScaredGhost': -400}
 
     def isDeadEnd(self, gameState):
         actions = gameState.getLegalActions(self.index)
