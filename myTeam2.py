@@ -18,6 +18,7 @@ from util import nearestPoint
 # Team creation #
 #################
 
+# noinspection PyUnusedLocal
 def createTeam(firstIndex, secondIndex, isRed,
                first='BlitzTopAgent', second='BlitzBottomAgent'):
     """
@@ -237,6 +238,7 @@ class ReflexCaptureAgent(CaptureAgent):
 
 
 class BaseAgent(ReflexCaptureAgent):
+    # noinspection PyUnusedLocal
     def __init__(self, index, timeForComputing=.1):
         CaptureAgent.__init__(self, index, timeForComputing=.1)
         self.target = None
@@ -388,6 +390,7 @@ class BaseAgent(ReflexCaptureAgent):
 
 
 class BlitzAgent(BaseAgent):
+    # noinspection PyUnusedLocal
     def __init__(self, index, timeForComputing=.1):
         CaptureAgent.__init__(self, index, timeForComputing=.1)
         self.target = None
