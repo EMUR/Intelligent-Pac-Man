@@ -20,7 +20,7 @@ from util import nearestPoint
 
 # noinspection PyUnusedLocal
 def createTeam(firstIndex, secondIndex, isRed,
-               first='MainAgentTop', second='MainAgentBottom'):
+               first='MainAgent', second='MainAgent'):
     """
     This function should return a list of two agents that will form the
     team, initialized using firstIndex and secondIndex as their agent
