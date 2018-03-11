@@ -46,7 +46,7 @@ class MainAgent(CaptureAgent):
     # noinspection PyUnusedLocal
     def __init__(self, index, timeForComputing=.1):
         CaptureAgent.__init__(self, index, timeForComputing=.1)
-        self.isAtCenter = False
+        self.reachedCenter = False
         self.mazeCenter = None
         self.initialPosition = None
         self.indices = None
@@ -76,12 +76,22 @@ class MainAgent(CaptureAgent):
         CaptureAgent.registerInitialState(self, gameState)
 
         if self.red:
-            self.indices = tuple(gameState.getRedTeamIndices())
+            self.indices = gameState.getRedTeamIndices()
         else:
-            self.indices = tuple(gameState.getBlueTeamIndices())
+            self.indices = gameState.getBlueTeamIndices()
 
         if self.initialPosition is None:
-            self.initialPosition = gameState.getAgentState(self.indices[1]).getPosition()
+            if self.index is 0 or self.index is 1:
+                self.initialPosition = gameState.getAgentState(self.indices[0]).getPosition()
+            else:
+                self.initialPosition = gameState.getAgentState(self.indices[1]).getPosition()
+
+        self.reachedCenter = False
+        self.lastRoleChange = 0
+
+        # TODO: remove, just for debugging
+        self.previousRole = None
+        self.currentRole = None
 
         # At the start of the game, or when respawned, agents try to reach the middle
         self.goToCenter(gameState)
@@ -93,12 +103,37 @@ class MainAgent(CaptureAgent):
         agentCurrentPosition = gameState.getAgentPosition(self.index)
         evaluateType = 'attack'
 
-        if not self.isAtCenter:
-            evaluateType = 'center'
+        # TODO: remove, just for debugging
+        # reason = ""
 
-        if agentCurrentPosition == self.mazeCenter and not self.isAtCenter:
-            self.isAtCenter = True
+        if agentCurrentPosition == self.initialPosition:
+            self.reachedCenter = False
+
+        if not self.reachedCenter:
+            evaluateType = 'center'
+            # reason = 'Agent {} tries to reach the center'.format(self.index)
+
+        if agentCurrentPosition == self.mazeCenter and not self.reachedCenter:
+            self.reachedCenter = True
             evaluateType = 'attack'
+            # reason = 'Agent {} attacks because it reached the center'.format(self.index)
+
+        # Consider the number fo enemies in your territory and number of Pacmen
+        numberOfPacmen = len(list(
+            filter(lambda agent: agent.isPacman, [gameState.getAgentState(index) for index in self.indices])))
+
+        thisAgentDistance = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
+
+        # If more than one member of the team is a pacman and the enemy has pacmen, switch the closest team member
+        # from attacking to defending
+        if numberOfPacmen > 1 and self.getNumberOfEnemyPacman(gameState):
+            for index in self.indices:
+                if index is not self.index:
+                    distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
+
+                    if thisAgentDistance < distanceOther:
+                        evaluateType = 'defend'
+                        # reason = 'Agent {} defends because of # of pacmen'.format(self.index)
 
         # Consider enemy positions
         enemyPositions = self.getVisibleEnemiesPositions(gameState)
@@ -106,33 +141,36 @@ class MainAgent(CaptureAgent):
 
         if enemyPositions:
             for enemyIndex, enemyPosition in enemyPositions:
-                if self.getMazeDistance(agentCurrentPosition, enemyPosition) < enemySafeDistance and not self.isPacman(
-                        gameState):
+                if self.getMazeDistance(agentCurrentPosition,
+                                        enemyPosition) < enemySafeDistance and not self.isPacman(gameState):
                     evaluateType = 'defend'
+                    # reason = 'Agent {} defends because of nearby enemy'.format(self.index)
                     break
-
-        numberOfPacmans = 0
-
-        for index in self.indices:
-            agentState = gameState.getAgentState(index)
-
-            if agentState.isPacman:
-                numberOfPacmans += 1
-
-        if numberOfPacmans > 1 and self.getNumberOfEnemyPacman(gameState):
-            for index in self.indices:
-                if index is not self.index:
-                    distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
-                    distanceThis = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
-
-                    if distanceThis < distanceOther:
-                        evaluateType = 'defend'
 
         actions = gameState.getLegalActions(self.index)
         values = [self.evaluate(gameState, action, evaluateType) for action in actions]
 
         maxValue = max(values)
         bestActions = [action for action, value in zip(actions, values) if value is maxValue]
+
+        if self.previousRole is None:
+            self.previousRole = self.currentRole
+
+        self.previousRole = self.currentRole
+        self.currentRole = evaluateType
+
+        # Ignore role changing rules if agent is trying to reach the center
+        if self.currentRole != 'center':
+            if self.previousRole != self.currentRole:
+                if self.lastRoleChange < 1:
+                    # print('\tRole change not allowed, last role change: {}'.format(self.lastRoleChange))
+                    self.currentRole = self.previousRole
+
+                else:
+                    # print('New role for agent {}: {}, reason: {}'.format(self.index, self.currentRole, reason))
+                    self.lastRoleChange = 0
+
+        self.lastRoleChange += 1
 
         return random.choice(bestActions)
 
