@@ -147,6 +147,23 @@ class MainAgent(CaptureAgent):
                     # reason = 'Agent {} defends because of nearby enemy'.format(self.index)
                     break
 
+        # numberOfPacmans = 0
+        #
+        # for index in self.indices:
+        #     agentState = gameState.getAgentState(index)
+        #
+        #     if agentState.isPacman:
+        #         numberOfPacmans += 1
+        #
+        # if numberOfPacmans > 1 and self.getNumberOfEnemyPacman(gameState):
+        #     for index in self.indices:
+        #         if index is not self.index:
+        #             distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
+        #             distanceThis = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
+        #
+        #             if distanceThis < distanceOther:
+        #                 evaluateType = 'defend'
+
         actions = gameState.getLegalActions(self.index)
         values = [self.evaluate(gameState, action, evaluateType) for action in actions]
 
@@ -219,6 +236,10 @@ class MainAgent(CaptureAgent):
         attackFeatures['distanceToFood'] = minDistance
 
         # TODO: Compute distance to other agent on team to maximize distance if in enemy territory
+        try:
+            attackFeatures['distanceBetweenMates'] = 1/self.getDistanceBetweenTeamMates(successor)
+        except ZeroDivisionError:
+            attackFeatures['distanceBetweenMates'] = 1
 
         # Compute distance to enemy
         closestEnemyDistance = self.getClosestEnemyDistance(successor)
@@ -283,7 +304,10 @@ class MainAgent(CaptureAgent):
                 [self.getMazeDistance(agentCurrentPosition, invader.getPosition()) for invader in invaders])
 
         # TODO: if you are a scared ghost, don't go after enemy Pacman
-
+        try:
+            defendingFeatures['distanceBetweenMates'] = 1 / self.getDistanceBetweenTeamMates(successor)
+        except ZeroDivisionError:
+            defendingFeatures['distanceBetweenMates'] = 1
         # Undesirable actions
         if action == Directions.STOP:
             defendingFeatures['stop'] = 1
@@ -312,7 +336,7 @@ class MainAgent(CaptureAgent):
     def getWeights(self):
         return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -50, 'successorScore': 100,
                 'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 100,
-                'distanceToCenter': -1, 'atCenter': 1000, 'stop': -2000, 'reverse': -20}
+                'distanceToCenter': -1, 'atCenter': 1000, 'stop': -2000, 'reverse': -20, 'distanceBetweenMates': -1000}
 
     def isDeadEnd(self, gameState):
         actions = gameState.getLegalActions(self.index)
@@ -340,6 +364,11 @@ class MainAgent(CaptureAgent):
     def getVisibleEnemiesPositions(self, gameState):
         enemiesAndPositions = [(enemy, gameState.getAgentPosition(enemy)) for enemy in self.getOpponents(gameState)]
         return [element for element in enemiesAndPositions if None not in element]
+
+    def getDistanceBetweenTeamMates(self, gameState):
+        return self.getMazeDistance(gameState.getAgentPosition(self.indices[0]),
+                                    gameState.getAgentPosition(self.indices[1]))
+
 
     def getClosestEnemyDistance(self, gameState):
         try:
