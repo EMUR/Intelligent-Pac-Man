@@ -329,9 +329,9 @@ class MainAgent(CaptureAgent):
         return startFeatures
 
     def getWeights(self):
-        return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -100, 'successorScore': 100,
-                'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 50, 'scaredNearbyEnemy': 100,
-                'distanceToCenter': -1, 'atCenter': 1000, 'stop': -2000, 'reverse': -20, 'distanceBetweenMates': -1000}
+        return {'numberOfInvaders': -0.5, 'invaderDistance': -0.025, 'cornerTrap': -0.05, 'successorScore': 0.05,
+                'danger': -0.2, 'distanceToFood': -0.0005, 'capsuleDistance': 0.025, 'scaredNearbyEnemy': 0.05,
+                'distanceToCenter': -0.0005, 'atCenter': 0.5, 'stop': -1.0, 'reverse': -0.01, 'distanceBetweenMates': -0.5}
 
     def isDeadEnd(self, gameState):
         actions = gameState.getLegalActions(self.index)
