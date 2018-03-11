@@ -56,11 +56,13 @@ class MainAgent(CaptureAgent):
     # noinspection PyUnusedLocal
     def __init__(self, index, timeForComputing=.1):
         CaptureAgent.__init__(self, index, timeForComputing=.1)
+        self.target = None
         self.otherAgent = None
         self.reachedCenter = False
         self.mazeCenter = None
         self.initialPosition = None
-        self.indices = None
+        self.agentsOnTeam = None
+        self.reachedTarget = False
 
         if index is 0 or index is 1:
             self.northBias = True
@@ -113,14 +115,14 @@ class MainAgent(CaptureAgent):
         #
         # # Consider the number fo enemies in your territory and number of Pacmen
         # numberOfPacmen = len(list(
-        #     filter(lambda agent: agent.isPacman, [gameState.getAgentState(index) for index in self.indices])))
+        #     filter(lambda agent: agent.isPacman, [gameState.getAgentState(index) for index in self.agentsOnTeam])))
         #
         # thisAgentDistance = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
         #
         # # If more than one member of the team is a pacman and the enemy has pacmen, switch the closest team member
         # # from attacking to defending
         # if numberOfPacmen > 1 and self.getNumberOfEnemyPacman(gameState):
-        #     for index in self.indices:
+        #     for index in self.agentsOnTeam:
         #         if index is not self.index:
         #             distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
         #
@@ -141,14 +143,14 @@ class MainAgent(CaptureAgent):
         #
         # numberOfPacmans = 0
         #
-        # for index in self.indices:
+        # for index in self.agentsOnTeam:
         #     agentState = gameState.getAgentState(index)
         #
         #     if agentState.isPacman:
         #         numberOfPacmans += 1
         #
         # if numberOfPacmans > 1 and self.getNumberOfEnemyPacman(gameState):
-        #     for index in self.indices:
+        #     for index in self.agentsOnTeam:
         #         if index is not self.index:
         #             distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
         #             distanceThis = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
@@ -183,22 +185,34 @@ class MainAgent(CaptureAgent):
         #
         # return random.choice(bestActions)
 
+        # Default mode is 'offense'
         evaluateType = 'offense'
 
-        currentAgentPosition = self.getCurrentAgentPosition(gameState)
+        # Head for the target at the beginning
+        if not self.reachedTarget:
+            evaluateType = 'start'
+
+        # Turn off 'start' mode if we've reached the target once
+        agentCurrentPosition = self.getCurrentAgentPosition(gameState)
+
+        if agentCurrentPosition == self.target and not self.reachedTarget:
+            evaluateType = 'offense'
+            self.reachedTarget = True
+
         opponentPositions = self.getOpponentPositions(gameState)
 
         if opponentPositions:
+            # for now, go defense mode if close enough
             for index, pos in opponentPositions:
-                if self.getMazeDistance(currentAgentPosition, pos) < 6 and self.isAtHome(gameState):
+                if self.getMazeDistance(agentCurrentPosition, pos) < 6 and self.isAtHome(gameState):
                     evaluateType = 'defense'
                     break
 
         actions = gameState.getLegalActions(self.index)
-        values = [self.evaluate(gameState, action, evaluateType) for action in actions]
+        values = [self.evaluate(gameState, a, evaluateType) for a in actions]
 
         maxValue = max(values)
-        bestActions = [action for action, value in zip(actions, values) if value == maxValue]
+        bestActions = [a for a, v in zip(actions, values) if v == maxValue]
 
         return random.choice(bestActions)
 
@@ -455,6 +469,8 @@ class MainAgent(CaptureAgent):
         return result
 
     def goToCenter(self, gameState):
+        self.reachedTarget = False
+        
         # Get geographical center
         x = int(gameState.getWalls().width / 2)
         y = int(gameState.getWalls().height / 2)
@@ -477,8 +493,8 @@ class MainAgent(CaptureAgent):
         return [element for element in enemiesAndPositions if None not in element]
 
     def getDistanceBetweenTeamMates(self, gameState):
-        return self.getMazeDistance(gameState.getAgentPosition(self.indices[0]),
-                                    gameState.getAgentPosition(self.indices[1]))
+        return self.getMazeDistance(gameState.getAgentPosition(self.agentsOnTeam[0]),
+                                    gameState.getAgentPosition(self.agentsOnTeam[1]))
 
     def getClosestEnemyDistance(self, gameState):
         try:
@@ -510,12 +526,13 @@ class MainAgent(CaptureAgent):
     def isPacman(self, gameState):
         return gameState.getAgentState(self.index).isPacman
 
+    def isAtHome(self, gameState):
+        return not self.isPacman(gameState)
+
     def getCurrentAgentPosition(self, gameState):
         return gameState.getAgentState(self.index).getPosition()
 
     def getOpponentPositions(self, gameState):
-        # might want to implement inference to store the most likely position
-        # if the enemy position can't be detected (is None)
         opponentPositions = []
 
         for opponentIndex in self.getOpponents(gameState):
@@ -524,10 +541,12 @@ class MainAgent(CaptureAgent):
             if pos is not None:
                 opponentPositions.append((opponentIndex, pos))
 
-        return opponentPositions
+        print
 
-    def isAtHome(self, gameState):
-        return not gameState.getAgentState(self.index).isPacman
+        enemiesAndPositions = [(enemy, gameState.getAgentPosition(enemy)) for enemy in self.getOpponents(gameState)]
+        return [element for element in enemiesAndPositions if None not in element]
+
+        return opponentPositions
 
     def getDistanceToTeammate(self, gameState):
         distanceToAgent = None

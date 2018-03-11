@@ -237,7 +237,7 @@ class ReflexCaptureAgent(CaptureAgent):
         pass
 
 
-class BaseAgent(ReflexCaptureAgent):
+class MainAgent(ReflexCaptureAgent):
     # noinspection PyUnusedLocal
     def __init__(self, index, timeForComputing=.1):
         CaptureAgent.__init__(self, index, timeForComputing=.1)
@@ -389,7 +389,7 @@ class BaseAgent(ReflexCaptureAgent):
         return startFeatures
 
 
-class BlitzAgent(BaseAgent):
+class BlitzAgent(MainAgent):
     # noinspection PyUnusedLocal
     def __init__(self, index, timeForComputing=.1):
         CaptureAgent.__init__(self, index, timeForComputing=.1)
