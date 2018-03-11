@@ -235,12 +235,6 @@ class MainAgent(CaptureAgent):
                            for food in self.getFood(successor).asList()])
         attackFeatures['distanceToFood'] = minDistance
 
-        # TODO: Compute distance to other agent on team to maximize distance if in enemy territory
-        try:
-            attackFeatures['distanceBetweenMates'] = 1/self.getDistanceBetweenTeamMates(successor)
-        except ZeroDivisionError:
-            attackFeatures['distanceBetweenMates'] = 1
-
         # Compute distance to enemy
         closestEnemyDistance = self.getClosestEnemyDistance(successor)
         minimumEnemyDistance = 4
@@ -273,6 +267,12 @@ class MainAgent(CaptureAgent):
                     attackFeatures['cornerTrap'] = 1
 
         attackFeatures['successorScore'] = self.getScore(successor)
+
+        # TODO: Compute distance to other agent on team to maximize distance if in enemy territory
+        try:
+            attackFeatures['distanceBetweenMates'] = 1 / self.getDistanceBetweenTeamMates(successor)
+        except ZeroDivisionError:
+            attackFeatures['distanceBetweenMates'] = 1
 
         # Undesirable actions
         if action == Directions.STOP:
@@ -308,6 +308,7 @@ class MainAgent(CaptureAgent):
             defendingFeatures['distanceBetweenMates'] = 1 / self.getDistanceBetweenTeamMates(successor)
         except ZeroDivisionError:
             defendingFeatures['distanceBetweenMates'] = 1
+
         # Undesirable actions
         if action == Directions.STOP:
             defendingFeatures['stop'] = 1
