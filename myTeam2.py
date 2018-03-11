@@ -43,6 +43,9 @@ def createTeam(firstIndex, secondIndex, isRed,
     agent1.setThreatened(False)
     agent2.setThreatened(False)
 
+    agent1.setNorthBias(True)
+    agent2.setNorthBias(False)
+
     return [agent1, agent2]
 
 
@@ -53,10 +56,6 @@ def createTeam(firstIndex, secondIndex, isRed,
 
 class MainAgent(CaptureAgent):
     # noinspection PyUnusedLocal
-    def __init__(self, index, timeForComputing=.1):
-        CaptureAgent.__init__(self, index, timeForComputing=.1)
-        self.target = None
-
     def registerInitialState(self, gameState):
         """
         This method handles the initial setup of the
@@ -86,20 +85,23 @@ class MainAgent(CaptureAgent):
         else:
             self.agentsOnTeam = gameState.getBlueTeamIndices()
 
-        self.setTarget(gameState)
+        # Avoid target being None
+        x = int(gameState.getWalls().width / 2)
+        y = int(gameState.getWalls().height / 2)
+
+        self.target = (x, y)
+
+        self.goToCenter(gameState)
 
     def chooseAction(self, gameState):
         """
         Picks among the actions with the highest Q(s,a).
         """
-        # Default mode is 'offense'
         evaluateType = 'offense'
 
-        # Head for the target at the beginning
         if not self.reachedTarget:
             evaluateType = 'start'
 
-        # Turn off 'start' mode if we've reached the target once
         agentCurrentPosition = self.getCurrentAgentPosition(gameState)
 
         if agentCurrentPosition == self.target and not self.reachedTarget:
@@ -109,7 +111,6 @@ class MainAgent(CaptureAgent):
         opponentPositions = self.getOpponentPositions(gameState)
 
         if opponentPositions:
-            # for now, go defense mode if close enough
             for index, pos in opponentPositions:
                 if self.getMazeDistance(agentCurrentPosition, pos) < 6 and self.isAtHome(gameState):
                     evaluateType = 'defense'
@@ -141,7 +142,7 @@ class MainAgent(CaptureAgent):
         Computes a linear combination of features and feature weights
         """
         global features
-        weights = self.getWeights(gameState, action)
+        weights = self.getWeights()
 
         if mode == 'offense':
             features = self.featuresForAttack(gameState, action)
@@ -252,7 +253,7 @@ class MainAgent(CaptureAgent):
 
         return startFeatures
 
-    def getWeights(self, gameState, action):
+    def getWeights(self):
         return {'numInvaders': -1000, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'suicide': -5000,
                 'successorScore': 200, 'distanceToFood': -5, 'distanceToOther': -40, 'distanceToOpponent': -225,
                 'distanceToCapsule': 45, 'distanceToCapsuleThreatened': -230, 'atHomeThreatened': 400,
@@ -264,6 +265,9 @@ class MainAgent(CaptureAgent):
 
     def setThreatened(self, val):
         self.threatened = val
+
+    def setNorthBias(self, val):
+        self.northBias = val
 
     def getCurrentAgentPosition(self, gameState):
         return gameState.getAgentState(self.index).getPosition()
@@ -289,8 +293,6 @@ class MainAgent(CaptureAgent):
 
         if self.index != self.agentsOnTeam[0]:
             otherAgentIndex = self.agentsOnTeam[0]
-            # The below code is indented under 'else'
-            # so that only 1 of the agents cares how close it is to the other
             myPos = self.getCurrentAgentPosition(gameState)
             otherPos = gameState.getAgentState(otherAgentIndex).getPosition()
             distanceToAgent = self.getMazeDistance(myPos, otherPos)
@@ -304,11 +306,10 @@ class MainAgent(CaptureAgent):
         myPos = self.getCurrentAgentPosition(gameState)
         foodList = self.getFood(gameState).asList()
 
-        if len(foodList) > 0:  # This should always be True,  but better safe than sorry
+        if len(foodList) > 0:
             return min([self.getMazeDistance(myPos, food) for food in foodList])
 
         else:
-            # somehow none of the opponent's food is left on the grid
             return None
 
     # Compute the index of, and distance to, closest enemy (if detected)
@@ -355,76 +356,22 @@ class MainAgent(CaptureAgent):
     def getCurrentAgentScaredTime(self, gameState):
         return gameState.getAgentState(self.index).scaredTimer
 
-    def setTarget(self, gameState):
-        pass
-
-
-class MainAgentTop(MainAgent):
-    def setTarget(self, gameState):
+    def goToCenter(self, gameState):
         self.reachedTarget = False
-        x = gameState.getWalls().width / 2
-        y = gameState.getWalls().height / 2
 
+        # Get geographical center
+        x = int(gameState.getWalls().width / 2)
+        y = int(gameState.getWalls().height / 2)
+
+        # Adjust center x for red
         if self.red:
-            x -= 1
+            x = x - 1
 
-        # set self.target
-        self.target = (x, y)
-        yLimit = gameState.getWalls().height
-        possibleTargets = []
+        if self.northBias:
+            maxHeight = gameState.getWalls().height
+            locations = [(x, thisY) for thisY in range(maxHeight - y, maxHeight, +1) if not gameState.hasWall(x, thisY)]
+        else:
+            locations = [(x, thisY) for thisY in range(y, 0, -1) if not gameState.hasWall(x, thisY)]
 
-        # Create a list of possible targets in the upper half
-        for i in xrange(yLimit - y):
-            if not gameState.hasWall(x, y):
-                possibleTargets.append((x, y))
-
-            y += 1
-
-        startPos = self.getCurrentAgentPosition(gameState)
-        min_dist = 1000
-        min_pos = None
-
-        # find the closest target position
-        for pos in possibleTargets:
-            dist = self.getMazeDistance(startPos, pos)
-            if dist <= min_dist:
-                min_dist = dist
-                min_pos = pos
-
-        self.target = min_pos
-
-
-class MainAgentBottom(MainAgent):
-    def setTarget(self, gameState):
-        self.reachedTarget = False
-        x = gameState.getWalls().width / 2
-        y = gameState.getWalls().height / 2
-
-        if self.red:
-            x -= 1
-
-        # set self.target
-        self.target = (x, y)
-        yLimit = 0
-        possibleTargets = []
-
-        # Create a list of possible targets in the lower half
-        for i in xrange(y - yLimit):
-            if not gameState.hasWall(x, y):
-                possibleTargets.append((x, y))
-
-            y -= 1
-
-        startPos = self.getCurrentAgentPosition(gameState)
-        min_dist = 1000
-        min_pos = None
-
-        # find the closest target position
-        for pos in possibleTargets:
-            dist = self.getMazeDistance(startPos, pos)
-
-            if dist <= min_dist:
-                min_dist = dist
-                min_pos = pos
-
-        self.target = min_pos
+        self.target = sorted(locations, key=lambda location: self.getMazeDistance(
+            self.getCurrentAgentPosition(gameState), location))[0]
