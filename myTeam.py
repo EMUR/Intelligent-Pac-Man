@@ -103,20 +103,15 @@ class MainAgent(CaptureAgent):
         agentCurrentPosition = gameState.getAgentPosition(self.index)
         evaluateType = 'attack'
 
-        # TODO: remove, just for debugging
-        # reason = ""
-
         if agentCurrentPosition == self.initialPosition:
             self.reachedCenter = False
 
         if not self.reachedCenter:
             evaluateType = 'center'
-            # reason = 'Agent {} tries to reach the center'.format(self.index)
 
         if agentCurrentPosition == self.mazeCenter and not self.reachedCenter:
             self.reachedCenter = True
             evaluateType = 'attack'
-            # reason = 'Agent {} attacks because it reached the center'.format(self.index)
 
         # Consider the number fo enemies in your territory and number of Pacmen
         numberOfPacmen = len(list(
@@ -144,25 +139,24 @@ class MainAgent(CaptureAgent):
                 if self.getMazeDistance(agentCurrentPosition,
                                         enemyPosition) < enemySafeDistance and not self.isPacman(gameState):
                     evaluateType = 'defend'
-                    # reason = 'Agent {} defends because of nearby enemy'.format(self.index)
                     break
 
-        # numberOfPacmans = 0
-        #
-        # for index in self.indices:
-        #     agentState = gameState.getAgentState(index)
-        #
-        #     if agentState.isPacman:
-        #         numberOfPacmans += 1
-        #
-        # if numberOfPacmans > 1 and self.getNumberOfEnemyPacman(gameState):
-        #     for index in self.indices:
-        #         if index is not self.index:
-        #             distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
-        #             distanceThis = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
-        #
-        #             if distanceThis < distanceOther:
-        #                 evaluateType = 'defend'
+        numberOfPacmans = 0
+
+        for index in self.indices:
+            agentState = gameState.getAgentState(index)
+
+            if agentState.isPacman:
+                numberOfPacmans += 1
+
+        if numberOfPacmans > 1 and self.getNumberOfEnemyPacman(gameState):
+            for index in self.indices:
+                if index is not self.index:
+                    distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
+                    distanceThis = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
+
+                    if distanceThis < distanceOther:
+                        evaluateType = 'defend'
 
         actions = gameState.getLegalActions(self.index)
         values = [self.evaluate(gameState, action, evaluateType) for action in actions]
@@ -184,7 +178,7 @@ class MainAgent(CaptureAgent):
                     self.currentRole = self.previousRole
 
                 else:
-                    # print('New role for agent {}: {}, reason: {}'.format(self.index, self.currentRole, reason))
+                    # print('New role for agent {}: {}'.format(self.index, self.currentRole))
                     self.lastRoleChange = 0
 
         self.lastRoleChange += 1
@@ -335,7 +329,7 @@ class MainAgent(CaptureAgent):
         return startFeatures
 
     def getWeights(self):
-        return {'numberOfInvaders': -1000, 'invaderDistance': -50, 'cornerTrap': -50, 'successorScore': 100,
+        return {'numberOfInvaders': -2000, 'invaderDistance': -50, 'cornerTrap': -100, 'successorScore': 100,
                 'danger': -400, 'distanceToFood': -1, 'capsuleDistance': 3, 'scaredNearbyEnemy': 100,
                 'distanceToCenter': -1, 'atCenter': 1000, 'stop': -2000, 'reverse': -20, 'distanceBetweenMates': -1000}
 
@@ -369,7 +363,6 @@ class MainAgent(CaptureAgent):
     def getDistanceBetweenTeamMates(self, gameState):
         return self.getMazeDistance(gameState.getAgentPosition(self.indices[0]),
                                     gameState.getAgentPosition(self.indices[1]))
-
 
     def getClosestEnemyDistance(self, gameState):
         try:
