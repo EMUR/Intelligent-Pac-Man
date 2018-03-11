@@ -20,7 +20,7 @@ from util import nearestPoint
 
 # noinspection PyUnusedLocal
 def createTeam(firstIndex, secondIndex, isRed,
-               first='BlitzTopAgent', second='BlitzBottomAgent'):
+               first='MainAgentTop', second='MainAgentBottom'):
     """
     This function should return a list of two agents that will form the
     team, initialized using firstIndex and secondIndex as their agent
@@ -50,10 +50,12 @@ def createTeam(firstIndex, secondIndex, isRed,
 # Agents #
 ##########
 
-class ReflexCaptureAgent(CaptureAgent):
-    """
-    A base class for reflex agents that chooses score-maximizing actions
-    """
+
+class MainAgent(CaptureAgent):
+    # noinspection PyUnusedLocal
+    def __init__(self, index, timeForComputing=.1):
+        CaptureAgent.__init__(self, index, timeForComputing=.1)
+        self.target = None
 
     def registerInitialState(self, gameState):
         """
@@ -90,11 +92,34 @@ class ReflexCaptureAgent(CaptureAgent):
         """
         Picks among the actions with the highest Q(s,a).
         """
+        # Default mode is 'offense'
+        evaluateType = 'offense'
+
+        # Head for the target at the beginning
+        if not self.reachedTarget:
+            evaluateType = 'start'
+
+        # Turn off 'start' mode if we've reached the target once
+        agentCurrentPosition = self.getCurrentAgentPosition(gameState)
+
+        if agentCurrentPosition == self.target and not self.reachedTarget:
+            evaluateType = 'offense'
+            self.reachedTarget = True
+
+        opponentPositions = self.getOpponentPositions(gameState)
+
+        if opponentPositions:
+            # for now, go defense mode if close enough
+            for index, pos in opponentPositions:
+                if self.getMazeDistance(agentCurrentPosition, pos) < 6 and self.isAtHome(gameState):
+                    evaluateType = 'defense'
+                    break
+
         actions = gameState.getLegalActions(self.index)
-        values = [self.evaluate(gameState, action) for action in actions]
+        values = [self.evaluate(gameState, a, evaluateType) for a in actions]
 
         maxValue = max(values)
-        bestActions = [action for action, value in zip(actions, values) if value == maxValue]
+        bestActions = [a for a, v in zip(actions, values) if v == maxValue]
 
         return random.choice(bestActions)
 
@@ -111,32 +136,129 @@ class ReflexCaptureAgent(CaptureAgent):
         else:
             return successor
 
-    def evaluate(self, gameState, action):
+    def evaluate(self, gameState, action, mode='offense'):
         """
         Computes a linear combination of features and feature weights
         """
-        theseFeatures = self.getFeatures(gameState, action)
+        global features
         weights = self.getWeights(gameState, action)
 
-        return theseFeatures * weights
+        if mode == 'offense':
+            features = self.featuresForAttack(gameState, action)
 
-    def getFeatures(self, gameState, action):
-        """
-        Returns a counter of features for the state
-        """
-        theseFeatures = util.Counter()
+        elif mode == 'defense':
+            features = self.featuresForDefense(gameState, action)
+
+        elif mode == 'start':
+            features = self.featuresForGoingToCenter(gameState, action)
+
+        return sum(features[key] * weights.get(key, 0) for key in features)
+
+    def featuresForDefense(self, gameState, action):
+        defenseFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
-        theseFeatures['successorScore'] = self.getScore(successor)
 
-        return theseFeatures
+        enemies = [successor.getAgentState(opponent) for opponent in self.getOpponents(successor)]
+        invaders = [enemy for enemy in enemies if enemy.isPacman and enemy.getPosition() is not None]
+        defenseFeatures['numInvaders'] = len(invaders)
+
+        if invaders:
+            minimumEnemyIndex, minimumDistance = self.getIndexAndDistanceToDetectedEnemy(successor)
+            defenseFeatures['invaderDistance'] = minimumDistance
+
+            if minimumDistance <= 1 and self.getCurrentAgentScaredTime(successor) > 0 and self.isAtHome(successor):
+                defenseFeatures['suicide'] = 1
+
+            if not self.isAtHome(successor) and minimumDistance <= 1:
+                defenseFeatures['suicide'] = 1
+
+        # Actions to avoid
+        if action == Directions.STOP:
+            defenseFeatures['stop'] = 0
+
+        rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
+
+        if action == rev:
+            defenseFeatures['reverse'] = 1
+
+        return defenseFeatures
+
+    def featuresForAttack(self, gameState, action):
+        offenseFeatures = util.Counter()
+        successor = self.getSuccessor(gameState, action)
+        offenseFeatures['successorScore'] = self.getScore(successor)
+
+        offenseFeatures['distanceToFood'] = self.getDistanceToClosestFood(successor)
+
+        closestCapsuleDistance = self.getDistanceToClosestCapsule(gameState, successor)
+
+        if closestCapsuleDistance == 0:
+            closestCapsuleDistance = 0.1
+
+        if closestCapsuleDistance is not None:
+            offenseFeatures['distanceToCapsule'] = 1.0 / closestCapsuleDistance
+
+        if not self.isAtHome(successor):
+            distanceToAgent = self.getDistanceToTeammate(successor)
+
+            if distanceToAgent is not None:
+                offenseFeatures['distanceToOther'] = 1.0 / distanceToAgent
+
+        enemyIndex, enemyDistance = self.getIndexAndDistanceToDetectedEnemy(successor)
+        closestCapsuleDistance = self.getDistanceToClosestCapsule(gameState, successor)
+
+        if enemyDistance is not None:
+            if enemyDistance <= 4:
+                self.threatened = True
+
+                if gameState.getAgentState(enemyIndex).scaredTimer > 1:
+                    offenseFeatures['distanceToOpponent'] = 0
+
+                else:
+                    if closestCapsuleDistance is not None:
+                        offenseFeatures['distanceToCapsuleThreatened'] = closestCapsuleDistance
+
+                    offenseFeatures['distanceToOpponent'] = 1.0 / enemyDistance
+
+                    if self.isAtHome(successor) and self.getCurrentAgentScaredTime(successor) <= 1:
+                        offenseFeatures['atHomeThreatened'] = 1
+
+                    if enemyDistance <= 1:
+                        offenseFeatures['suicide'] = 1
+
+        if enemyDistance is None or enemyDistance > 4:
+            self.threatened = False
+
+        if self.otherAgent.threatened and closestCapsuleDistance is not None and closestCapsuleDistance <= 5:
+            offenseFeatures['distanceToCapsuleThreatened'] = closestCapsuleDistance
+
+        # Actions to avoid
+        if action == Directions.STOP:
+            offenseFeatures['stop'] = 1
+
+        return offenseFeatures
+
+    def featuresForGoingToCenter(self, gameState, action):
+        startFeatures = util.Counter()
+        successor = self.getSuccessor(gameState, action)
+
+        currentAgentPosition = self.getCurrentAgentPosition(successor)
+
+        distanceToCenter = self.getMazeDistance(currentAgentPosition, self.target)
+        startFeatures['distanceToTarget'] = distanceToCenter
+
+        if currentAgentPosition == self.target:
+            startFeatures['atTarget'] = 1
+
+        return startFeatures
 
     def getWeights(self, gameState, action):
-        """
-        Normally, weights do not depend on the gamestate.  They can be either
-        a counter or a dictionary.
-        """
-        return {'successorScore': 1.0}
+        return {'numInvaders': -1000, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'suicide': -5000,
+                'successorScore': 200, 'distanceToFood': -5, 'distanceToOther': -40, 'distanceToOpponent': -225,
+                'distanceToCapsule': 45, 'distanceToCapsuleThreatened': -230, 'atHomeThreatened': 400,
+                'distanceToTarget': -10, 'atTarget': 100}
 
+    # Utility methods
     def setOtherAgent(self, other):
         self.otherAgent = other
 
@@ -237,201 +359,7 @@ class ReflexCaptureAgent(CaptureAgent):
         pass
 
 
-class MainAgent(ReflexCaptureAgent):
-    # noinspection PyUnusedLocal
-    def __init__(self, index, timeForComputing=.1):
-        CaptureAgent.__init__(self, index, timeForComputing=.1)
-        self.target = None
-
-    def chooseAction(self, gameState):
-        """
-        Picks among the actions with the highest Q(s,a).
-        """
-        evaluateType = 'offense'
-
-        currentAgentPosition = self.getCurrentAgentPosition(gameState)
-        opponentPositions = self.getOpponentPositions(gameState)
-
-        if opponentPositions:
-            for index, pos in opponentPositions:
-                if self.getMazeDistance(currentAgentPosition, pos) < 6 and self.isAtHome(gameState):
-                    evaluateType = 'defense'
-                    break
-
-        actions = gameState.getLegalActions(self.index)
-        values = [self.evaluate(gameState, action, evaluateType) for action in actions]
-
-        maxValue = max(values)
-        bestActions = [action for action, value in zip(actions, values) if value == maxValue]
-
-        return random.choice(bestActions)
-
-    def evaluate(self, gameState, action, mode='offense'):
-        """
-        Computes a linear combination of features and feature weights
-        """
-        global features
-        weights = self.getWeights(gameState, action)
-
-        if mode == 'offense':
-            features = self.featuresForAttack(gameState, action)
-
-        elif mode == 'defense':
-            features = self.featuresForDefense(gameState, action)
-
-        elif mode == 'start':
-            features = self.featuresForGoingToCenter(gameState, action)
-
-        return sum(features[key] * weights.get(key, 0) for key in features)
-
-    def featuresForDefense(self, gameState, action):
-        defenseFeatures = util.Counter()
-        successor = self.getSuccessor(gameState, action)
-
-        enemies = [successor.getAgentState(opponent) for opponent in self.getOpponents(successor)]
-        invaders = [enemy for enemy in enemies if enemy.isPacman and enemy.getPosition() is not None]
-        defenseFeatures['numInvaders'] = len(invaders)
-
-        if invaders:
-            minimumEnemyIndex, minimumDistance = self.getIndexAndDistanceToDetectedEnemy(successor)
-            defenseFeatures['invaderDistance'] = minimumDistance
-
-            if minimumDistance <= 1 and self.getCurrentAgentScaredTime(successor) > 0 and self.isAtHome(successor):
-                defenseFeatures['suicide'] = 1
-
-            if not self.isAtHome(successor) and minimumDistance <= 1:
-                defenseFeatures['suicide'] = 1
-
-        # Actions to avoid
-        if action == Directions.STOP:
-            defenseFeatures['stop'] = 0
-
-        rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
-
-        if action == rev:
-            defenseFeatures['reverse'] = 1
-
-        return defenseFeatures
-
-    def getWeights(self, gameState, action):
-        return {'numInvaders': -1000, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'suicide': -5000,
-                'successorScore': 200, 'distanceToFood': -5, 'distanceToOther': -40, 'distanceToOpponent': -225,
-                'distanceToCapsule': 45, 'distanceToCapsuleThreatened': -230, 'atHomeThreatened': 400,
-                'distanceToTarget': -10, 'atTarget': 100}
-
-    def featuresForAttack(self, gameState, action):
-        offenseFeatures = util.Counter()
-        successor = self.getSuccessor(gameState, action)
-        offenseFeatures['successorScore'] = self.getScore(successor)
-
-        offenseFeatures['distanceToFood'] = self.getDistanceToClosestFood(successor)
-
-        closestCapsuleDistance = self.getDistanceToClosestCapsule(gameState, successor)
-
-        if closestCapsuleDistance == 0:
-            closestCapsuleDistance = 0.1
-
-        if closestCapsuleDistance is not None:
-            offenseFeatures['distanceToCapsule'] = 1.0 / closestCapsuleDistance
-
-        if not self.isAtHome(successor):
-            distanceToAgent = self.getDistanceToTeammate(successor)
-
-            if distanceToAgent is not None:
-                offenseFeatures['distanceToOther'] = 1.0 / distanceToAgent
-
-        enemyIndex, enemyDistance = self.getIndexAndDistanceToDetectedEnemy(successor)
-        closestCapsuleDistance = self.getDistanceToClosestCapsule(gameState, successor)
-
-        if enemyDistance is not None:
-            if enemyDistance <= 4:
-                self.threatened = True
-
-                if gameState.getAgentState(enemyIndex).scaredTimer > 1:
-                    offenseFeatures['distanceToOpponent'] = 0
-
-                else:
-                    if closestCapsuleDistance is not None:
-                        offenseFeatures['distanceToCapsuleThreatened'] = closestCapsuleDistance
-
-                    offenseFeatures['distanceToOpponent'] = 1.0 / enemyDistance
-
-                    if self.isAtHome(successor) and self.getCurrentAgentScaredTime(successor) <= 1:
-                        offenseFeatures['atHomeThreatened'] = 1
-
-                    if enemyDistance <= 1:
-                        offenseFeatures['suicide'] = 1
-
-        if enemyDistance is None or enemyDistance > 4:
-            self.threatened = False
-
-        if self.otherAgent.threatened and closestCapsuleDistance is not None and closestCapsuleDistance <= 5:
-            offenseFeatures['distanceToCapsuleThreatened'] = closestCapsuleDistance
-
-        # Actions to avoid
-        if action == Directions.STOP:
-            offenseFeatures['stop'] = 1
-
-        return offenseFeatures
-
-    def featuresForGoingToCenter(self, gameState, action):
-        startFeatures = util.Counter()
-        successor = self.getSuccessor(gameState, action)
-
-        currentAgentPosition = self.getCurrentAgentPosition(successor)
-
-        distanceToCenter = self.getMazeDistance(currentAgentPosition, self.target)
-        startFeatures['distanceToTarget'] = distanceToCenter
-
-        if currentAgentPosition == self.target:
-            startFeatures['atTarget'] = 1
-
-        return startFeatures
-
-
-class BlitzAgent(MainAgent):
-    # noinspection PyUnusedLocal
-    def __init__(self, index, timeForComputing=.1):
-        CaptureAgent.__init__(self, index, timeForComputing=.1)
-        self.target = None
-
-    def chooseAction(self, gameState):
-        """
-        Picks among the actions with the highest Q(s,a).
-        """
-        # Default mode is 'offense'
-        evaluateType = 'offense'
-
-        # Head for the target at the beginning
-        if not self.reachedTarget:
-            evaluateType = 'start'
-
-        # Turn off 'start' mode if we've reached the target once
-        agentCurrentPosition = self.getCurrentAgentPosition(gameState)
-
-        if agentCurrentPosition == self.target and not self.reachedTarget:
-            evaluateType = 'offense'
-            self.reachedTarget = True
-
-        opponentPositions = self.getOpponentPositions(gameState)
-
-        if opponentPositions:
-            # for now, go defense mode if close enough
-            for index, pos in opponentPositions:
-                if self.getMazeDistance(agentCurrentPosition, pos) < 6 and self.isAtHome(gameState):
-                    evaluateType = 'defense'
-                    break
-
-        actions = gameState.getLegalActions(self.index)
-        values = [self.evaluate(gameState, a, evaluateType) for a in actions]
-
-        maxValue = max(values)
-        bestActions = [a for a, v in zip(actions, values) if v == maxValue]
-
-        return random.choice(bestActions)
-
-
-class BlitzTopAgent(BlitzAgent):
+class MainAgentTop(MainAgent):
     def setTarget(self, gameState):
         self.reachedTarget = False
         x = gameState.getWalls().width / 2
@@ -466,7 +394,7 @@ class BlitzTopAgent(BlitzAgent):
         self.target = min_pos
 
 
-class BlitzBottomAgent(BlitzAgent):
+class MainAgentBottom(MainAgent):
     def setTarget(self, gameState):
         self.reachedTarget = False
         x = gameState.getWalls().width / 2
