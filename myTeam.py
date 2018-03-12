@@ -34,8 +34,6 @@ def createTeam(firstIndex, secondIndex, isRed,
     any extra arguments, so you should make sure that the default
     behavior is what you want for the nightly contest.
     """
-    # The following line is an example only; feel free to change it.
-
     agent1 = eval(first)(firstIndex)
     agent2 = eval(second)(secondIndex)
 
@@ -45,6 +43,9 @@ def createTeam(firstIndex, secondIndex, isRed,
     agent1.setThreatened(False)
     agent2.setThreatened(False)
 
+    agent1.setNorthBias(True)
+    agent2.setNorthBias(False)
+
     return [agent1, agent2]
 
 
@@ -52,23 +53,9 @@ def createTeam(firstIndex, secondIndex, isRed,
 # Agents #
 ##########
 
+
 class MainAgent(CaptureAgent):
     # noinspection PyUnusedLocal
-    def __init__(self, index, timeForComputing=.1):
-        CaptureAgent.__init__(self, index, timeForComputing=.1)
-        self.target = None
-        self.otherAgent = None
-        self.reachedCenter = False
-        self.mazeCenter = None
-        self.initialPosition = None
-        self.agentsOnTeam = None
-        self.reachedTarget = False
-
-        if index is 0 or index is 1:
-            self.northBias = True
-        else:
-            self.northBias = False
-
     def registerInitialState(self, gameState):
         """
         This method handles the initial setup of the
@@ -80,6 +67,7 @@ class MainAgent(CaptureAgent):
         self.distancer.getDistance(p1, p2)
         IMPORTANT: This method may run for at most 15 seconds.
         """
+
         ''' 
         Make sure you do not delete the following line. If you would like to
         use Manhattan distances instead of maze distances in order to save
@@ -88,11 +76,20 @@ class MainAgent(CaptureAgent):
         '''
         CaptureAgent.registerInitialState(self, gameState)
 
+        ''' 
+        Your initialization code goes here, if you need any.
+        '''
         if self.red:
             self.agentsOnTeam = gameState.getRedTeamIndices()
 
         else:
             self.agentsOnTeam = gameState.getBlueTeamIndices()
+
+        # Avoid target being None
+        x = int(gameState.getWalls().width / 2)
+        y = int(gameState.getWalls().height / 2)
+
+        self.center = (x, y)
 
         self.goToCenter(gameState)
 
@@ -100,109 +97,20 @@ class MainAgent(CaptureAgent):
         """
         Picks among the actions with the highest Q(s,a).
         """
-        # agentCurrentPosition = gameState.getAgentPosition(self.index)
-        # evaluateType = 'attack'
-        #
-        # if agentCurrentPosition == self.initialPosition:
-        #     self.reachedCenter = False
-        #
-        # if not self.reachedCenter:
-        #     evaluateType = 'center'
-        #
-        # if agentCurrentPosition == self.mazeCenter and not self.reachedCenter:
-        #     self.reachedCenter = True
-        #     evaluateType = 'attack'
-        #
-        # # Consider the number fo enemies in your territory and number of Pacmen
-        # numberOfPacmen = len(list(
-        #     filter(lambda agent: agent.isPacman, [gameState.getAgentState(index) for index in self.agentsOnTeam])))
-        #
-        # thisAgentDistance = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
-        #
-        # # If more than one member of the team is a pacman and the enemy has pacmen, switch the closest team member
-        # # from attacking to defending
-        # if numberOfPacmen > 1 and self.getNumberOfEnemyPacman(gameState):
-        #     for index in self.agentsOnTeam:
-        #         if index is not self.index:
-        #             distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
-        #
-        #             if thisAgentDistance < distanceOther:
-        #                 evaluateType = 'defend'
-        #                 # reason = 'Agent {} defends because of # of pacmen'.format(self.index)
-        #
-        # # Consider enemy positions
-        # enemyPositions = self.getVisibleEnemiesPositions(gameState)
-        # enemySafeDistance = 6
-        #
-        # if enemyPositions:
-        #     for enemyIndex, enemyPosition in enemyPositions:
-        #         if self.getMazeDistance(agentCurrentPosition,
-        #                                 enemyPosition) < enemySafeDistance and not self.isPacman(gameState):
-        #             evaluateType = 'defend'
-        #             break
-        #
-        # numberOfPacmans = 0
-        #
-        # for index in self.agentsOnTeam:
-        #     agentState = gameState.getAgentState(index)
-        #
-        #     if agentState.isPacman:
-        #         numberOfPacmans += 1
-        #
-        # if numberOfPacmans > 1 and self.getNumberOfEnemyPacman(gameState):
-        #     for index in self.agentsOnTeam:
-        #         if index is not self.index:
-        #             distanceOther = self.getMazeDistance(gameState.getAgentPosition(index), self.mazeCenter)
-        #             distanceThis = self.getMazeDistance(gameState.getAgentPosition(self.index), self.mazeCenter)
-        #
-        #             if distanceThis < distanceOther:
-        #                 evaluateType = 'defend'
-        #
-        # actions = gameState.getLegalActions(self.index)
-        # values = [self.evaluate(gameState, action, evaluateType) for action in actions]
-        #
-        # maxValue = max(values)
-        # bestActions = [action for action, value in zip(actions, values) if value is maxValue]
-        #
-        # if self.previousRole is None:
-        #     self.previousRole = self.currentRole
-        #
-        # self.previousRole = self.currentRole
-        # self.currentRole = evaluateType
-        #
-        # # Ignore role changing rules if agent is trying to reach the center
-        # if self.currentRole != 'center':
-        #     if self.previousRole != self.currentRole:
-        #         if self.lastRoleChange < 1:
-        #             # print('\tRole change not allowed, last role change: {}'.format(self.lastRoleChange))
-        #             self.currentRole = self.previousRole
-        #
-        #         else:
-        #             # print('New role for agent {}: {}'.format(self.index, self.currentRole))
-        #             self.lastRoleChange = 0
-        #
-        # self.lastRoleChange += 1
-        #
-        # return random.choice(bestActions)
+        evaluateType = 'attack'
 
-        # Default mode is 'offense'
-        evaluateType = 'offense'
+        if not self.reachedCenter:
+            evaluateType = 'goToCenter'
 
-        # Head for the target at the beginning
-        if not self.reachedTarget:
-            evaluateType = 'start'
-
-        # Turn off 'start' mode if we've reached the target once
         agentCurrentPosition = self.getCurrentAgentPosition(gameState)
 
-        if agentCurrentPosition == self.target and not self.reachedTarget:
-            evaluateType = 'offense'
-            self.reachedTarget = True
+        if agentCurrentPosition == self.center and not self.reachedCenter:
+            evaluateType = 'attack'
+            self.reachedCenter = True
 
         opponentPositions = self.getOpponentPositions(gameState)
 
         if opponentPositions:
-            # for now, go defense mode if close enough
             for index, pos in opponentPositions:
                 if self.getMazeDistance(agentCurrentPosition, pos) < 6 and self.isAtHome(gameState):
                     evaluateType = 'defense'
@@ -226,94 +134,34 @@ class MainAgent(CaptureAgent):
         if agentCurrentPosition != nearestPoint(agentCurrentPosition):
             # Only half a grid position was covered
             return successor.generateSuccessor(self.index, action)
-
         else:
             return successor
 
-    def evaluate(self, gameState, action, evaluateType):
+    def evaluate(self, gameState, action, agentType='attack'):
         """
         Computes a linear combination of features and feature weights
         """
         global features
         weights = self.getWeights()
 
-        if evaluateType == 'offense':
-            features = self.featuresForAttack(gameState, action)
+        if agentType == 'attack':
+            features = self.getFeaturesForAttack(gameState, action)
 
-        elif evaluateType == 'defense':
-            features = self.featuresForDefense(gameState, action)
+        elif agentType == 'defense':
+            features = self.getFeaturesForDefense(gameState, action)
 
-        elif evaluateType == 'start':
-            features = self.featuresForGoingToCenter(gameState, action)
+        elif agentType == 'goToCenter':
+            features = self.getFeaturesForGoingToCenter(gameState, action)
 
         return sum(features[key] * weights.get(key, 0) for key in features)
 
-    def featuresForAttack(self, gameState, action):
-        # attackFeatures = util.Counter()
-        # successor = self.getSuccessor(gameState, action)
-        #
-        # agentCurrentState = successor.getAgentState(self.index)
-        # agentCurrentPosition = agentCurrentState.getPosition()
-        #
-        # # Compute distance to the nearest food
-        # minDistance = min([self.getMazeDistance(agentCurrentPosition, food)
-        #                    for food in self.getFood(successor).asList()])
-        # attackFeatures['distanceToFood'] = minDistance
-        #
-        # # Compute distance to enemy
-        # closestEnemyDistance = self.getClosestEnemyDistance(successor)
-        # minimumEnemyDistance = 2
-        #
-        # if closestEnemyDistance <= minimumEnemyDistance:
-        #     attackFeatures['danger'] = 1
-        #
-        # # Compute distance to capsule
-        # capsules = self.getCapsules(successor)
-        #
-        # try:
-        #     closestCapsuleDistance = min([self.getMazeDistance(agentCurrentPosition, capsule) for capsule in capsules])
-        # except ValueError:
-        #     closestCapsuleDistance = .1
-        #
-        # attackFeatures['capsuleDistance'] = 1.0 / closestCapsuleDistance
-        #
-        # # Get distance to closest scared enemy
-        # closestEnemyDistance = self.getClosestScaredEnemyDistance(successor)
-        #
-        # if closestEnemyDistance is not None and closestEnemyDistance < 3:
-        #     attackFeatures['scaredNearbyEnemy'] = 1
-        #
-        # # Check if state is a dead end
-        # if self.isDeadEnd(successor):
-        #     x, y = successor.getAgentState(self.index).getPosition()
-        #
-        #     if successor.getAgentState(self.index).isPacman:
-        #         if not gameState.hasFood(int(x), int(y)) and (x, y) != self.initialPosition:
-        #             attackFeatures['cornerTrap'] = 1
-        #
-        # attackFeatures['successorScore'] = self.getScore(successor)
-        #
-        # try:
-        #     attackFeatures['distanceBetweenMates'] = 1 / self.getDistanceBetweenTeamMates(successor)
-        # except ZeroDivisionError:
-        #     attackFeatures['distanceBetweenMates'] = 1
-        #
-        # # Undesirable actions
-        # if action == Directions.STOP:
-        #     attackFeatures['stop'] = 1
-        #
-        # reverseAction = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
-        #
-        # if action == reverseAction:
-        #     attackFeatures['reverse'] = 1
-        #
-        # return attackFeatures
-
-        offenseFeatures = util.Counter()
+    def getFeaturesForAttack(self, gameState, action):
+        attackFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
-        offenseFeatures['successorScore'] = self.getScore(successor)
 
-        offenseFeatures['distanceToFood'] = self.getDistanceToClosestFood(successor)
+        attackFeatures['successorScore'] = self.getScore(successor)
+
+        attackFeatures['distanceToFood'] = self.getDistanceToClosestFood(successor)
 
         closestCapsuleDistance = self.getDistanceToClosestCapsule(gameState, successor)
 
@@ -321,95 +169,58 @@ class MainAgent(CaptureAgent):
             closestCapsuleDistance = 0.1
 
         if closestCapsuleDistance is not None:
-            offenseFeatures['distanceToCapsule'] = 1.0 / closestCapsuleDistance
+            attackFeatures['distanceToCapsule'] = 1.0 / closestCapsuleDistance
 
         if not self.isAtHome(successor):
             distanceToAgent = self.getDistanceToTeammate(successor)
 
             if distanceToAgent is not None:
-                offenseFeatures['distanceToOther'] = 1.0 / distanceToAgent
+                attackFeatures['distanceToTeammate'] = 1.0 / distanceToAgent
 
         enemyIndex, enemyDistance = self.getIndexAndDistanceToDetectedEnemy(successor)
-        closestCapsuleDistance = self.getDistanceToClosestCapsule(gameState, successor)
+
+        safeEnemyDistance = 4
 
         if enemyDistance is not None:
-            if enemyDistance <= 4:
+            if enemyDistance <= safeEnemyDistance:
                 self.threatened = True
 
                 if gameState.getAgentState(enemyIndex).scaredTimer > 1:
-                    offenseFeatures['distanceToOpponent'] = 0
+                    attackFeatures['distanceToOpponent'] = 0
 
                 else:
                     if closestCapsuleDistance is not None:
-                        offenseFeatures['distanceToCapsuleThreatened'] = closestCapsuleDistance
+                        attackFeatures['distanceToCapsuleThreatened'] = closestCapsuleDistance
 
-                    offenseFeatures['distanceToOpponent'] = 1.0 / enemyDistance
+                    attackFeatures['distanceToOpponent'] = 1.0 / enemyDistance
 
                     if self.isAtHome(successor) and self.getCurrentAgentScaredTime(successor) <= 1:
-                        offenseFeatures['atHomeThreatened'] = 1
+                        attackFeatures['atHomeThreatened'] = 1
 
                     if enemyDistance <= 1:
-                        offenseFeatures['suicide'] = 1
+                        attackFeatures['suicide'] = 1
 
-        if enemyDistance is None or enemyDistance > 4:
+        if enemyDistance is None or enemyDistance > safeEnemyDistance:
             self.threatened = False
 
-        if self.otherAgent.threatened and closestCapsuleDistance is not None and closestCapsuleDistance <= 5:
-            offenseFeatures['distanceToCapsuleThreatened'] = closestCapsuleDistance
+        safeClosestCapsuleDistance = 5
+
+        if self.otherAgent.threatened and closestCapsuleDistance is not None and closestCapsuleDistance\
+                <= safeClosestCapsuleDistance:
+            attackFeatures['distanceToCapsuleThreatened'] = closestCapsuleDistance
 
         # Actions to avoid
         if action == Directions.STOP:
-            offenseFeatures['stop'] = 1
+            attackFeatures['stop'] = 1
 
-        return offenseFeatures
+        reverse = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
 
-    def featuresForDefense(self, gameState, action):
-        # defendingFeatures = util.Counter()
-        # successor = self.getSuccessor(gameState, action)
-        #
-        # agentCurrentState = successor.getAgentState(self.index)
-        # agentCurrentPosition = agentCurrentState.getPosition()
-        #
-        # # Find number of invaders
-        # enemies = [successor.getAgentState(opponent) for opponent in self.getOpponents(successor)]
-        # invaders = list(
-        #     filter(lambda thisInvader: thisInvader.isPacman and thisInvader.getPosition() is not None, enemies))
-        # defendingFeatures['numberOfInvaders'] = len(invaders)
-        #
-        # minimumInvaderDistance = 0
-        #
-        # # Find distance to closest invader
-        # if invaders:
-        #     minimumInvaderDistance = min([self.getMazeDistance(agentCurrentPosition, invader.getPosition())
-        #                                   for invader in invaders])
-        #     defendingFeatures['invaderDistance'] = minimumInvaderDistance
-        #
-        # # If you are a scared ghost, don't go after enemy Pacman
-        # agentScaredTimer = agentCurrentState.scaredTimer
-        #
-        # if agentScaredTimer > 0:
-        #     print('Agent scared timer: {}, minimum invader distance: {}'.format(agentScaredTimer, minimumInvaderDistance))
-        #
-        # if agentScaredTimer and minimumInvaderDistance < 3:
-        #     defendingFeatures['teammateIsScaredGhost'] = 1
-        #     print('Scared agent')
-        #
-        # try:
-        #     defendingFeatures['distanceBetweenMates'] = 1 / self.getDistanceBetweenTeamMates(successor)
-        # except ZeroDivisionError:
-        #     defendingFeatures['distanceBetweenMates'] = 1
-        #
-        # # Undesirable actions
-        # if action == Directions.STOP:
-        #     defendingFeatures['stop'] = 1
-        #
-        # reverseAction = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
-        #
-        # if action == reverseAction:
-        #     defendingFeatures['reverse'] = 1
-        #
-        # return defendingFeatures
+        if action == reverse:
+            attackFeatures['reverse'] = 1
 
+        return attackFeatures
+    
+    def getFeaturesForDefense(self, gameState, action):
         defenseFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
 
@@ -438,38 +249,99 @@ class MainAgent(CaptureAgent):
 
         return defenseFeatures
 
-    def featuresForGoingToCenter(self, gameState, action):
-        startFeatures = util.Counter()
+    def getFeaturesForGoingToCenter(self, gameState, action):
+        gotToCenterFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
 
-        agentCurrentState = successor.getAgentState(self.index)
-        agentCurrentPosition = agentCurrentState.getPosition()
+        currentAgentPosition = self.getCurrentAgentPosition(successor)
 
-        startFeatures['distanceToCenter'] = self.getMazeDistance(agentCurrentPosition, self.mazeCenter)
+        distanceToCenter = self.getMazeDistance(currentAgentPosition, self.center)
+        gotToCenterFeatures['distanceToCenter'] = distanceToCenter
 
-        if agentCurrentPosition == self.mazeCenter:
-            startFeatures['atCenter'] = 1
+        if currentAgentPosition == self.center:
+            gotToCenterFeatures['atCenter'] = 1
 
-        return startFeatures
+        return gotToCenterFeatures
 
     def getWeights(self):
-        # return {'numberOfInvaders': -0.5, 'invaderDistance': -0.025, 'cornerTrap': -0.05, 'successorScore': 0.05,
-        #         'danger': -0.2, 'distanceToFood': -0.0005, 'capsuleDistance': 0.025, 'scaredNearbyEnemy': 0.05,
-        #         'distanceToCenter': -0.0005, 'atCenter': 0.5, 'stop': -1.0, 'reverse': -0.01,
-        #         'teammateIsScaredGhost': -0.2, 'distanceBetweenMates': -0.5}
-
         return {'numberOfInvaders': -1000, 'invaderDistance': -10, 'stop': -100, 'reverse': -2, 'suicide': -5000,
-                'successorScore': 200, 'distanceToFood': -5, 'distanceToOther': -40, 'distanceToOpponent': -225,
+                'successorScore': 200, 'distanceToFood': -5, 'distanceToTeammate': -40, 'distanceToOpponent': -225,
                 'distanceToCapsule': 45, 'distanceToCapsuleThreatened': -230, 'atHomeThreatened': 400,
                 'distanceToCenter': -10, 'atCenter': 100}
 
-    def isDeadEnd(self, gameState):
-        actions = gameState.getLegalActions(self.index)
-        result = len(actions) <= 2
-        return result
+    # Utility methods
+    def setOtherAgent(self, other):
+        self.otherAgent = other
+
+    def setThreatened(self, val):
+        self.threatened = val
+
+    def setNorthBias(self, val):
+        self.northBias = val
+
+    def getCurrentAgentPosition(self, gameState):
+        return gameState.getAgentState(self.index).getPosition()
+
+    def getCurrentAgentScaredTime(self, gameState):
+        return gameState.getAgentState(self.index).scaredTimer
+    
+    def isAttacking(self, gameState):
+        return gameState.getAgentState(self.index).isPacman
+
+    def isAtHome(self, gameState):
+        return not self.isAttacking(gameState)
+
+    def getOpponentPositions(self, gameState):
+        enemiesAndPositions = [(enemy, gameState.getAgentPosition(enemy)) for enemy in self.getOpponents(gameState)]
+        return [element for element in enemiesAndPositions if None not in element]
+
+    def getDistanceToTeammate(self, gameState):
+        distanceToAgent = None
+
+        if self.index != self.agentsOnTeam[0]:
+            otherAgentIndex = self.agentsOnTeam[0]
+            otherAgentPosition = gameState.getAgentState(otherAgentIndex).getPosition()
+            distanceToAgent = self.getMazeDistance(self.getCurrentAgentPosition(gameState), otherAgentPosition)
+
+            if distanceToAgent == 0:
+                distanceToAgent = 0.5
+
+        return distanceToAgent
+
+    def getDistanceToClosestFood(self, gameState):
+        try:
+            return min([self.getMazeDistance(self.getCurrentAgentPosition(gameState), food)
+                        for food in self.getFood(gameState).asList()])
+        except ValueError:
+            return None
+
+    def getIndexAndDistanceToDetectedEnemy(self, gameState):
+        agentCurrentPosition = self.getCurrentAgentPosition(gameState)
+
+        try:
+            enemyIndex, enemyDistance = min([(index, self.getMazeDistance(agentCurrentPosition, enemyPosition))
+                                             for (index, enemyPosition) in self.getOpponentPositions(gameState)])
+            if enemyDistance == 0:
+                enemyDistance = 0.5
+
+            return enemyIndex, enemyDistance
+
+        except ValueError:
+            return None, None
+
+    def getDistanceToClosestCapsule(self, gameState, successor):
+        if len(self.getCapsules(successor)) < len(self.getCapsules(gameState)):
+            return 0
+
+        else:
+            try:
+                return min([self.getMazeDistance(self.getCurrentAgentPosition(successor), capsulePosition)
+                            for capsulePosition in self.getCapsules(successor)])
+            except ValueError:
+                return None
 
     def goToCenter(self, gameState):
-        self.reachedTarget = False
+        self.reachedCenter = False
 
         # Get geographical center
         x = int(gameState.getWalls().width / 2)
@@ -485,137 +357,5 @@ class MainAgent(CaptureAgent):
         else:
             locations = [(x, thisY) for thisY in range(y, 0, -1) if not gameState.hasWall(x, thisY)]
 
-        self.mazeCenter = sorted(locations, key=lambda location: self.getMazeDistance(
-            gameState.getAgentState(self.index).getPosition(), location))[0]
-
-    def getVisibleEnemiesPositions(self, gameState):
-        enemiesAndPositions = [(enemy, gameState.getAgentPosition(enemy)) for enemy in self.getOpponents(gameState)]
-        return [element for element in enemiesAndPositions if None not in element]
-
-    def getDistanceBetweenTeamMates(self, gameState):
-        return self.getMazeDistance(gameState.getAgentPosition(self.agentsOnTeam[0]),
-                                    gameState.getAgentPosition(self.agentsOnTeam[1]))
-
-    def getClosestEnemyDistance(self, gameState):
-        try:
-            filteredEnemiesAndPositions = list(filter(lambda element:
-                                                      gameState.getAgentState(element[0]).scaredTimer is 0
-                                                      and not gameState.getAgentState(element[0]).isPacman,
-                                                      self.getVisibleEnemiesPositions(gameState)))
-
-            return min([self.getMazeDistance(gameState.getAgentPosition(self.index), position)
-                        for (index, position) in filteredEnemiesAndPositions])
-        except ValueError:
-            return None
-
-    def getClosestScaredEnemyDistance(self, gameState):
-        try:
-            filteredEnemiesAndPositions = list(filter(lambda element:
-                                                      gameState.getAgentState(element[0]).scaredTimer > 0
-                                                      and not gameState.getAgentState(element[0]).isPacman,
-                                                      self.getVisibleEnemiesPositions(gameState)))
-
-            return min([self.getMazeDistance(gameState.getAgentPosition(self.index), position)
-                        for (index, position) in filteredEnemiesAndPositions])
-        except ValueError:
-            return None
-
-    def getNumberOfEnemyPacman(self, gameState):
-        return sum([gameState.getAgentState(enemy).isPacman for enemy in self.getOpponents(gameState)])
-
-    def isPacman(self, gameState):
-        return gameState.getAgentState(self.index).isPacman
-
-    def isAtHome(self, gameState):
-        return not self.isPacman(gameState)
-
-    def getCurrentAgentPosition(self, gameState):
-        return gameState.getAgentState(self.index).getPosition()
-
-    def getOpponentPositions(self, gameState):
-        opponentPositions = []
-
-        for opponentIndex in self.getOpponents(gameState):
-            pos = gameState.getAgentPosition(opponentIndex)
-
-            if pos is not None:
-                opponentPositions.append((opponentIndex, pos))
-
-        return opponentPositions
-
-    def getDistanceToTeammate(self, gameState):
-        distanceToAgent = None
-
-        if self.index != self.agentsOnTeam[0]:
-            otherAgentIndex = self.agentsOnTeam[0]
-            # The below code is indented under 'else'
-            # so that only 1 of the agents cares how close it is to the other
-            myPos = self.getCurrentAgentPosition(gameState)
-            otherPos = gameState.getAgentState(otherAgentIndex).getPosition()
-            distanceToAgent = self.getMazeDistance(myPos, otherPos)
-
-            if distanceToAgent == 0:
-                distanceToAgent = 0.5
-
-        return distanceToAgent
-
-    def getDistanceToClosestFood(self, gameState):
-        myPos = self.getCurrentAgentPosition(gameState)
-        foodList = self.getFood(gameState).asList()
-
-        if len(foodList) > 0:  # This should always be True,  but better safe than sorry
-            return min([self.getMazeDistance(myPos, food) for food in foodList])
-
-        else:
-            # somehow none of the opponent's food is left on the grid
-            return None
-
-    # Compute the index of, and distance to, closest enemy (if detected)
-    def getIndexAndDistanceToDetectedEnemy(self, gameState):
-        enemyIndex = None
-        distToEnemy = None
-        opponentPositions = self.getOpponentPositions(gameState)
-
-        if opponentPositions:
-            min_dist = 10000
-            min_index = None
-            myPos = self.getCurrentAgentPosition(gameState)
-
-            for index, pos in opponentPositions:
-                dist = self.getMazeDistance(myPos, pos)
-
-                if dist < min_dist:
-                    min_dist = dist
-                    min_index = index
-
-                    if min_dist == 0:
-                        min_dist = 0.5
-
-            enemyIndex = min_index
-            distToEnemy = min_dist
-
-        return enemyIndex, distToEnemy
-
-    def getDistanceToClosestCapsule(self, gameState, successor):
-        myPos = self.getCurrentAgentPosition(successor)
-        oldCapsuleList = self.getCapsules(gameState)
-        capsuleList = self.getCapsules(successor)
-
-        minDistance = None
-
-        if len(capsuleList) < len(oldCapsuleList):
-            minDistance = 0
-
-        elif len(capsuleList) > 0:
-            minDistance = min([self.getMazeDistance(myPos, capsule) for capsule in capsuleList])
-
-        return minDistance
-
-    def getCurrentAgentScaredTime(self, gameState):
-        return gameState.getAgentState(self.index).scaredTimer
-
-    def setOtherAgent(self, other):
-        self.otherAgent = other
-
-    def setThreatened(self, val):
-        self.threatened = val
+        self.center = sorted(locations, key=lambda location: self.getMazeDistance(
+            self.getCurrentAgentPosition(gameState), location))[0]
