@@ -470,7 +470,7 @@ class MainAgent(CaptureAgent):
 
     def goToCenter(self, gameState):
         self.reachedTarget = False
-        
+
         # Get geographical center
         x = int(gameState.getWalls().width / 2)
         y = int(gameState.getWalls().height / 2)
@@ -540,11 +540,6 @@ class MainAgent(CaptureAgent):
 
             if pos is not None:
                 opponentPositions.append((opponentIndex, pos))
-
-        print
-
-        enemiesAndPositions = [(enemy, gameState.getAgentPosition(enemy)) for enemy in self.getOpponents(gameState)]
-        return [element for element in enemiesAndPositions if None not in element]
 
         return opponentPositions
 

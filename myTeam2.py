@@ -129,9 +129,9 @@ class MainAgent(CaptureAgent):
         Finds the next successor which is a grid position (location tuple).
         """
         successor = gameState.generateSuccessor(self.index, action)
-        pos = successor.getAgentState(self.index).getPosition()
+        agentCurrentPosition = successor.getAgentState(self.index).getPosition()
 
-        if pos != nearestPoint(pos):
+        if agentCurrentPosition != nearestPoint(agentCurrentPosition):
             # Only half a grid position was covered
             return successor.generateSuccessor(self.index, action)
         else:
@@ -276,26 +276,16 @@ class MainAgent(CaptureAgent):
         return not gameState.getAgentState(self.index).isPacman
 
     def getOpponentPositions(self, gameState):
-        # might want to implement inference to store the most likely position
-        # if the enemy position can't be detected (is None)
-        opponentPositions = []
-
-        for opponentIndex in self.getOpponents(gameState):
-            pos = gameState.getAgentPosition(opponentIndex)
-
-            if pos is not None:
-                opponentPositions.append((opponentIndex, pos))
-
-        return opponentPositions
+        enemiesAndPositions = [(enemy, gameState.getAgentPosition(enemy)) for enemy in self.getOpponents(gameState)]
+        return [element for element in enemiesAndPositions if None not in element]
 
     def getDistanceToTeammate(self, gameState):
         distanceToAgent = None
 
         if self.index != self.agentsOnTeam[0]:
             otherAgentIndex = self.agentsOnTeam[0]
-            myPos = self.getCurrentAgentPosition(gameState)
-            otherPos = gameState.getAgentState(otherAgentIndex).getPosition()
-            distanceToAgent = self.getMazeDistance(myPos, otherPos)
+            otherAgentPosition = gameState.getAgentState(otherAgentIndex).getPosition()
+            distanceToAgent = self.getMazeDistance(self.getCurrentAgentPosition(gameState), otherAgentPosition)
 
             if distanceToAgent == 0:
                 distanceToAgent = 0.5
@@ -303,55 +293,48 @@ class MainAgent(CaptureAgent):
         return distanceToAgent
 
     def getDistanceToClosestFood(self, gameState):
-        myPos = self.getCurrentAgentPosition(gameState)
-        foodList = self.getFood(gameState).asList()
-
-        if len(foodList) > 0:
-            return min([self.getMazeDistance(myPos, food) for food in foodList])
-
-        else:
+        try:
+            return min([self.getMazeDistance(self.getCurrentAgentPosition(gameState), food)
+                        for food in self.getFood(gameState).asList()])
+        except ValueError:
             return None
 
     # Compute the index of, and distance to, closest enemy (if detected)
     def getIndexAndDistanceToDetectedEnemy(self, gameState):
         enemyIndex = None
-        distToEnemy = None
+        enemyDistance = None
         opponentPositions = self.getOpponentPositions(gameState)
 
         if opponentPositions:
-            min_dist = 10000
-            min_index = None
-            myPos = self.getCurrentAgentPosition(gameState)
+            minimumEnemyDistance = 10000
+            minimumEnemyIndex = None
+            agentCurrentPosition = self.getCurrentAgentPosition(gameState)
 
-            for index, pos in opponentPositions:
-                dist = self.getMazeDistance(myPos, pos)
+            for currentEnemyIndex, currentEnemyPosition in opponentPositions:
+                currentEnemyDistance = self.getMazeDistance(agentCurrentPosition, currentEnemyPosition)
 
-                if dist < min_dist:
-                    min_dist = dist
-                    min_index = index
+                if currentEnemyDistance < minimumEnemyDistance:
+                    minimumEnemyDistance = currentEnemyDistance
+                    minimumEnemyIndex = currentEnemyIndex
 
-                    if min_dist == 0:
-                        min_dist = 0.5
+                    if minimumEnemyDistance is 0:
+                        minimumEnemyDistance = 0.5
 
-            enemyIndex = min_index
-            distToEnemy = min_dist
+            enemyIndex = minimumEnemyIndex
+            enemyDistance = minimumEnemyDistance
 
-        return enemyIndex, distToEnemy
+        return enemyIndex, enemyDistance
 
     def getDistanceToClosestCapsule(self, gameState, successor):
-        myPos = self.getCurrentAgentPosition(successor)
-        oldCapsuleList = self.getCapsules(gameState)
-        capsuleList = self.getCapsules(successor)
+        if len(self.getCapsules(successor)) < len(self.getCapsules(gameState)):
+            return 0
 
-        minDistance = None
-
-        if len(capsuleList) < len(oldCapsuleList):
-            minDistance = 0
-
-        elif len(capsuleList) > 0:
-            minDistance = min([self.getMazeDistance(myPos, capsule) for capsule in capsuleList])
-
-        return minDistance
+        else:
+            try:
+                return min([self.getMazeDistance(self.getCurrentAgentPosition(successor), capsulePosition)
+                            for capsulePosition in self.getCapsules(successor)])
+            except ValueError:
+                return None
 
     def getCurrentAgentScaredTime(self, gameState):
         return gameState.getAgentState(self.index).scaredTimer
