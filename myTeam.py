@@ -117,11 +117,10 @@ class MainAgent(CaptureAgent):
         safeEnemyDistance = 6
 
         if enemiesIndexesAndPositions:
-            for index, enemyPosition in enemiesIndexesAndPositions:
-                if self.getMazeDistance(agentCurrentPosition, enemyPosition) \
-                        < safeEnemyDistance and self.isInOwnTerritory(gameState):
-                    evaluateType = 'defense'
-                    break
+            if [(index, enemyPosition) for index, enemyPosition in enemiesIndexesAndPositions
+                if self.getMazeDistance(agentCurrentPosition, enemyPosition) < safeEnemyDistance
+                   and self.isInOwnTerritory(gameState)]:
+                evaluateType = 'defense'
 
         actions = gameState.getLegalActions(self.index)
         values = [self.evaluate(gameState, action, evaluateType) for action in actions]
@@ -166,55 +165,60 @@ class MainAgent(CaptureAgent):
         attackFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
 
+        # Consider successor score
         attackFeatures['successorScore'] = self.getScore(successor)
 
+        # Consider distance to nearest food
         attackFeatures['distanceToFood'] = self.getDistanceToClosestFood(successor)
 
+        # Consider distance to nearest capsule
         closestCapsuleDistance = self.getDistanceToClosestCapsule(gameState, successor)
 
-        if closestCapsuleDistance == 0:
-            closestCapsuleDistance = 0.1
-
         if closestCapsuleDistance is not None:
-            attackFeatures['distanceToCapsule'] = 1.0 / closestCapsuleDistance
+            try:
+                attackFeatures['distanceToCapsule'] = 1.0 / closestCapsuleDistance
 
-        if not self.isInOwnTerritory(successor):
-            distanceToAgent = self.getDistanceBetweenTeammates(successor)
-
-            if distanceToAgent is not None:
-                attackFeatures['distanceToTeammate'] = 1.0 / distanceToAgent
+            except ZeroDivisionError:
+                attackFeatures['distanceToCapsule'] = 10
 
         enemyIndex, enemyDistance = self.getEnemiesIndexesAndDistances(successor)
 
+        safeClosestCapsuleDistance = 6
+
+        # Consider if close to a capsule and nearby enemy is scared is and if teammate danger state and if self is
+        # close to capsule
+        if closestCapsuleDistance is not None:
+            if (enemyDistance is not None and self.getEnemyScaredTimer(gameState, enemyIndex) > 1) \
+                    or (self.otherAgent.isInDanger and closestCapsuleDistance < safeClosestCapsuleDistance):
+                attackFeatures['distanceToCapsuleInDanger'] = closestCapsuleDistance
+
+        # Consider distance to detected enemies
         safeEnemyDistance = 4
+        self.isInDanger = False
 
         if enemyDistance is not None:
             if enemyDistance <= safeEnemyDistance:
                 self.isInDanger = True
 
-                if gameState.getAgentState(enemyIndex).scaredTimer > 1:
-                    attackFeatures['distanceToEnemy'] = 0
-
-                else:
-                    if closestCapsuleDistance is not None:
-                        attackFeatures['distanceToCapsuleInDanger'] = closestCapsuleDistance
-
+                if self.getEnemyScaredTimer(gameState, enemyIndex) <= 1:
                     attackFeatures['distanceToEnemy'] = 1.0 / enemyDistance
-
-                    if self.isInOwnTerritory(successor) and self.getCurrentAgentScaredTimer(successor) <= 1:
-                        attackFeatures['InOwnTerritoryInDanger'] = 1
 
                     if enemyDistance <= 1:
                         attackFeatures['deadlyAction'] = 1
 
-        if enemyDistance is None or enemyDistance > safeEnemyDistance:
-            self.isInDanger = False
+                    if self.isInOwnTerritory(successor) and self.getCurrentAgentScaredTimer(successor) < 2:
+                        attackFeatures['inOwnTerritoryInDanger'] = 1
 
-        safeClosestCapsuleDistance = 5
+                else:
+                    # Neutralize effect of enemy distance, since enemy is scared and 2 or more position away
+                    attackFeatures['distanceToEnemy'] = 0
 
-        if self.otherAgent.isInDanger and closestCapsuleDistance is not None and closestCapsuleDistance \
-                <= safeClosestCapsuleDistance:
-            attackFeatures['distanceToCapsuleInDanger'] = closestCapsuleDistance
+        # Consider distance to teammate, if in its own territory
+        if not self.isInOwnTerritory(successor):
+            distanceToAgent = self.getDistanceBetweenTeammates(successor)
+
+            if distanceToAgent is not None:
+                attackFeatures['distanceToTeammate'] = 1.0 / distanceToAgent
 
         # Actions to avoid
         if action == Directions.STOP:
@@ -231,25 +235,22 @@ class MainAgent(CaptureAgent):
         defenseFeatures = util.Counter()
         successor = self.getSuccessor(gameState, action)
 
-        enemies = [successor.getAgentState(enemy) for enemy in self.getOpponents(successor)]
-        invaders = [enemy for enemy in enemies if enemy.isPacman and enemy.getPosition() is not None]
-        defenseFeatures['numberOfInvaders'] = len(invaders)
+        # Consider number of attackers
+        attackers = list(filter(lambda an_enemy: an_enemy.isPacman and an_enemy.getPosition() is not None,
+                                [successor.getAgentState(enemy) for enemy in self.getOpponents(successor)]))
+        defenseFeatures['numberOfAttackers'] = len(attackers)
 
-        if invaders:
+        if attackers:
+            # Consider distance to closest attacker
             minimumEnemyIndex, minimumDistance = self.getEnemiesIndexesAndDistances(successor)
-            defenseFeatures['distanceToInvader'] = minimumDistance
+            defenseFeatures['distanceToClosestAttacker'] = minimumDistance
 
-            if minimumDistance <= 1 and self.getCurrentAgentScaredTimer(successor) > 0 and self.isInOwnTerritory(
-                    successor):
-                defenseFeatures['deadlyAction'] = 1
-
-            if not self.isInOwnTerritory(successor) and minimumDistance <= 1:
-                defenseFeatures['deadlyAction'] = 1
+            if minimumDistance <= 1:
+                if (self.getCurrentAgentScaredTimer(successor) > 0 and self.isInOwnTerritory(successor)) \
+                        or (not self.isInOwnTerritory(successor)):
+                    defenseFeatures['deadlyAction'] = 1
 
         # Actions to avoid
-        if action == Directions.STOP:
-            defenseFeatures['stop'] = 0
-
         reverse = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
 
         if action == reverse:
@@ -262,9 +263,7 @@ class MainAgent(CaptureAgent):
         successor = self.getSuccessor(gameState, action)
 
         currentAgentPosition = self.getCurrentAgentPosition(successor)
-
-        distanceToCenter = self.getMazeDistance(currentAgentPosition, self.mazeCenter)
-        gotToCenterFeatures['distanceToCenter'] = distanceToCenter
+        gotToCenterFeatures['distanceToCenter'] = self.getMazeDistance(currentAgentPosition, self.mazeCenter)
 
         if currentAgentPosition == self.mazeCenter:
             gotToCenterFeatures['atCenter'] = 1
@@ -274,14 +273,14 @@ class MainAgent(CaptureAgent):
     def getWeights(self):
         return {
             'successorScore': 0.04,
-            'numberOfInvaders': -0.2,
-            'distanceToInvader': -0.002,
+            'numberOfAttackers': -0.2,
+            'distanceToClosestAttacker': -0.002,
             'distanceToFood': -0.001,
             'distanceToTeammate': -0.008,
             'distanceToEnemy': -0.045,
             'distanceToCapsule': 0.009,
             'distanceToCapsuleInDanger': -0.046,
-            'InOwnTerritoryInDanger': 0.08,
+            'inOwnTerritoryInDanger': 0.08,
             'distanceToCenter': -0.002,
             'atCenter': 0.02,
             'deadlyAction': -1.0,
@@ -293,14 +292,17 @@ class MainAgent(CaptureAgent):
     def getCurrentAgentPosition(self, gameState):
         return gameState.getAgentState(self.index).getPosition()
 
-    def getCurrentAgentScaredTimer(self, gameState):
-        return gameState.getAgentState(self.index).scaredTimer
-
     def isInEnemyTerritory(self, gameState):
         return gameState.getAgentState(self.index).isPacman
 
     def isInOwnTerritory(self, gameState):
         return not self.isInEnemyTerritory(gameState)
+
+    def getCurrentAgentScaredTimer(self, gameState):
+        return gameState.getAgentState(self.index).scaredTimer
+
+    def getEnemyScaredTimer(self, gameState, enemyIndex):
+        return gameState.getAgentState(enemyIndex).scaredTimer
 
     def getEnemiesIndexesAndPositions(self, gameState):
         enemiesAndPositions = [(enemy, gameState.getAgentPosition(enemy)) for enemy in self.getOpponents(gameState)]
@@ -313,26 +315,24 @@ class MainAgent(CaptureAgent):
             enemyIndex, enemyDistance = min([(index, self.getMazeDistance(agentCurrentPosition, enemyPosition))
                                              for (index, enemyPosition)
                                              in self.getEnemiesIndexesAndPositions(gameState)])
-            if enemyDistance == 0:
-                enemyDistance = 0.5
 
-            return enemyIndex, enemyDistance
+            return enemyIndex, max(enemyDistance, 0.5)
 
         except ValueError:
             return None, None
 
     def getDistanceBetweenTeammates(self, gameState):
-        distanceToAgent = None
+        agentDistance = None
 
         if self.index != self.teamIndices[0]:
             otherAgentIndex = self.teamIndices[0]
             otherAgentPosition = gameState.getAgentState(otherAgentIndex).getPosition()
-            distanceToAgent = self.getMazeDistance(self.getCurrentAgentPosition(gameState), otherAgentPosition)
+            agentDistance = self.getMazeDistance(self.getCurrentAgentPosition(gameState), otherAgentPosition)
 
-            if distanceToAgent == 0:
-                distanceToAgent = 0.5
-
-        return distanceToAgent
+        if agentDistance is not None:
+            return max(agentDistance, 0.5)
+        else:
+            return None
 
     def getDistanceToClosestFood(self, gameState):
         try:
